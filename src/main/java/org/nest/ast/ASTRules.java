@@ -1,6 +1,11 @@
 package org.nest.ast;
 
-public interface ASTRules {
+import org.nest.errors.ErrorManager;
+import org.nest.tokenization.TokenList;
+
+
+public interface ASTRules
+{
     ASTWrapper createAST(TokenList tokens, ErrorManager errors);
 }
 

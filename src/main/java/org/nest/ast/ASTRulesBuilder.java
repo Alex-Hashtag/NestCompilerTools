@@ -1,6 +1,11 @@
 package org.nest.ast;
 
-public interface ASTRulesBuilder {
+import java.util.List;
+
+
+public interface ASTRulesBuilder
+{
     ASTRulesBuilder topRule(List<String> ruleNames); // entry points
+
     ASTRuleTemplate startRule(String name);
 }

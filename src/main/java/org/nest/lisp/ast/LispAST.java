@@ -1,6 +1,8 @@
 package org.nest.lisp.ast;
 
-public record LispAST(List<LispNode>)
-{
+import java.util.List;
 
+
+public record LispAST(List<LispNode> list)
+{
 }
