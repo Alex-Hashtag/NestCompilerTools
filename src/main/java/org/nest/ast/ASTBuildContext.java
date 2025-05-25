@@ -6,11 +6,11 @@ import java.util.function.Supplier;
 
 public interface ASTBuildContext
 {
-    <T> void put(String key, T value);
+    <T> Runnable put(String key, T value);
 
     <T> T get(String key, Class<T> clazz);
 
-    Object get(String key);
+    <T> T get(String key);
 
     <T> List<T> getList(String key, Class<T> clazz);
 

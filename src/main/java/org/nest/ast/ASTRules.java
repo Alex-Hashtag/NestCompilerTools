@@ -7,5 +7,9 @@ import org.nest.tokenization.TokenList;
 public interface ASTRules
 {
     ASTWrapper createAST(TokenList tokens, ErrorManager errors);
+    static ASTRulesBuilder builder()
+    {
+        return null;
+    }
 }
 
