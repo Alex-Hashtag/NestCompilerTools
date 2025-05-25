@@ -423,6 +423,16 @@ public final class TokenList implements Iterable<Token> {
         return sep.toString();
     }
 
+    public int size()
+    {
+        return tokens.size() - 2;
+    }
+
+    public Token get(int i)
+    {
+        return tokens.get(i);
+    }
+
     private enum InternalProtoType {
         KEYWORD,
         DELIMITER,

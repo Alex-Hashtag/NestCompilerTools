@@ -3,21 +3,63 @@ package org.nest.ast;
 import org.nest.ast.functional.ASTAction;
 import org.nest.ast.functional.ASTNodeConsumer;
 import org.nest.ast.functional.TokenAction;
+import org.nest.ast.state.Step;
+
+import java.util.ArrayList;
+import java.util.List;
 
 
-public interface ASTDefinitionTemplateOptional
+public class ASTDefinitionTemplateOptional
 {
-    ASTDefinitionTemplate keyword(String value, TokenAction action);
+    ASTDefinitionTemplate astDefinitionTemplateCaller;
 
-    ASTDefinitionTemplate operator(String value, TokenAction action);
+    List<Step> children;
 
-    ASTDefinitionTemplate delimeter(String value, TokenAction action);
+    ASTDefinitionTemplateOptional(ASTDefinitionTemplate astDefinitionTemplate)
+    {
+        this.astDefinitionTemplateCaller = astDefinitionTemplate;
+        children = new ArrayList<>();
+    }
 
-    ASTDefinitionTemplate identifier(String type, TokenAction action);
+    public ASTDefinitionTemplateOptional keyword(String value, TokenAction action)
+    {
+        children.add(new Step.Keyword(value, action));
+        return this;
+    }
 
-    ASTDefinitionTemplate literal(String type, TokenAction action);
+    public ASTDefinitionTemplateOptional operator(String value, TokenAction action)
+    {
+        children.add(new Step.Operator(value, action));
+        return this;
+    }
 
-    ASTDefinitionTemplate rule(String ruleName, ASTNodeConsumer consumer);
+    public ASTDefinitionTemplateOptional delimiter(String value, TokenAction action)
+    {
+        children.add(new Step.Delimiter(value, action));
+        return this;
+    }
 
-    ASTDefinitionTemplate otherwise(ASTAction fallback);
+    public ASTDefinitionTemplateOptional identifier(String type, TokenAction action)
+    {
+        children.add(new Step.Identifier(type, action));
+        return this;
+    }
+
+    public ASTDefinitionTemplateOptional literal(String type, TokenAction action)
+    {
+        children.add(new Step.Literal(type, action));
+        return this;
+    }
+
+    public ASTDefinitionTemplateOptional rule(String ruleName, ASTNodeConsumer consumer)
+    {
+        children.add(new Step.Rule(ruleName, consumer));
+        return this;
+    }
+
+    public ASTDefinitionTemplate otherwise(ASTAction fallback)
+    {
+        this.astDefinitionTemplateCaller.definition.addStep(new Step.Optional(children, fallback));
+        return this.astDefinitionTemplateCaller;
+    }
 }

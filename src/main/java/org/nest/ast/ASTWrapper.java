@@ -1,15 +1,36 @@
 package org.nest.ast;
 
-import org.nest.errors.CompilerError;
-
 import java.util.List;
 
 
-public interface ASTWrapper
+/**
+ *
+ */
+public class ASTWrapper
 {
-    boolean hasErrors();
+    private final List<Object> astNodes;
+    private final boolean hasErrors;
 
-    Object get(); // or <T> T get(Class<T>) if generic
+    ASTWrapper(List<Object> astNode)
+    {
+        this.astNodes = astNode;
+        this.hasErrors = false;
+    }
 
-    List<CompilerError> getErrors();
+    ASTWrapper()
+    {
+        this.astNodes = null;
+        this.hasErrors = true;
+    }
+
+    public boolean hasErrors()
+    {
+        return hasErrors;
+    }
+
+    public List<Object> get()
+    {
+        return this.astNodes;
+    }
+
 }
