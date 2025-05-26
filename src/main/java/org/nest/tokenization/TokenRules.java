@@ -10,7 +10,7 @@ public final class TokenRules
     boolean longestMatchFirst;
     boolean caseSensitive;
 
-    protected TokenRules(List<TokenPrototype> tokenPrototypes, WhitespaceMode whitespaceMode, boolean longestMatchFirst, boolean caseSensitive)
+    private TokenRules(List<TokenPrototype> tokenPrototypes, WhitespaceMode whitespaceMode, boolean longestMatchFirst, boolean caseSensitive)
     {
         this.tokenPrototypes = tokenPrototypes;
         this.whitespaceMode = whitespaceMode;

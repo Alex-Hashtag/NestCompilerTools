@@ -6,8 +6,10 @@ public sealed interface Token
 {
     Coordinates position();
 
-    default String getValue() {
-        return switch (this) {
+    default String getValue()
+    {
+        return switch (this)
+        {
             case Start _ -> "Start";
             case End _ -> "End";
             case NewLine _ -> "NewLine";
@@ -27,51 +29,111 @@ public sealed interface Token
     // ==== Token Types ==== //
     // ===================== //
 
-    record Keyword(Coordinates position, String value) implements Token {
-        @Override public String toString() { return "Keyword: " + value; }
+    record Keyword(Coordinates position, String value) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "Keyword: " + value;
+        }
     }
 
-    record Delimiter(Coordinates position, String value) implements Token {
-        @Override public String toString() { return "Delimiter: " + value; }
+    record Delimiter(Coordinates position, String value) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "Delimiter: " + value;
+        }
     }
 
-    record Operator(Coordinates position, String value) implements Token {
-        @Override public String toString() { return "Operator: " + value; }
+    record Operator(Coordinates position, String value) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "Operator: " + value;
+        }
     }
 
-    record Literal(Coordinates position, String type, String value) implements Token {
-        @Override public String toString() { return "Literal (" + type + "): " + value; }
+    record Literal(Coordinates position, String type, String value) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "Literal (" + type + "): " + value;
+        }
     }
 
-    record Identifier(Coordinates position, String type, String value) implements Token {
-        @Override public String toString() { return "Identifier (" + type + "): " + value; }
+    record Identifier(Coordinates position, String type, String value) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "Identifier (" + type + "): " + value;
+        }
     }
 
-    record Comment(Coordinates position, String value) implements Token {
-        @Override public String toString() { return "Comment: " + value; }
+    record Comment(Coordinates position, String value) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "Comment: " + value;
+        }
     }
 
-    record Start(Coordinates position) implements Token {
-        @Override public String toString() { return "Start"; }
+    record Start(Coordinates position) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "Start";
+        }
     }
 
-    record End(Coordinates position) implements Token {
-        @Override public String toString() { return "End"; }
+    record End(Coordinates position) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "End";
+        }
     }
 
-    record NewLine(Coordinates position) implements Token {
-        @Override public String toString() { return "NewLine"; }
+    record NewLine(Coordinates position) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "NewLine";
+        }
     }
 
-    record IndentIncr(Coordinates position) implements Token {
-        @Override public String toString() { return "IndentIncr"; }
+    record IndentIncr(Coordinates position) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "IndentIncr";
+        }
     }
 
-    record IndentDecr(Coordinates position) implements Token {
-        @Override public String toString() { return "IndentDecr"; }
+    record IndentDecr(Coordinates position) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "IndentDecr";
+        }
     }
 
-    record Invalid(Coordinates position, String value) implements Token {
-        @Override public String toString() { return "Invalid: " + value; }
+    record Invalid(Coordinates position, String value) implements Token
+    {
+        @Override
+        public String toString()
+        {
+            return "Invalid: " + value;
+        }
     }
 }

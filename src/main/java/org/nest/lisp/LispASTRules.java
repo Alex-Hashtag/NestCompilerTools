@@ -1,80 +1,26 @@
-package org.nest;
+package org.nest.lisp;
 
 import org.nest.ast.ASTRules;
-import org.nest.ast.ASTWrapper;
-import org.nest.errors.ErrorManager;
-import org.nest.lisp.ast.LispAST;
 import org.nest.lisp.ast.LispAtom;
 import org.nest.lisp.ast.LispList;
 import org.nest.lisp.ast.LispNode;
-import org.nest.tokenization.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
 
-public class Main
+/**
+ * Defines the AST rules for Lisp language parsing.
+ */
+public class LispASTRules
 {
-    public static final java.util.function.Function<Token.Comment, Token.Comment> stripLispCommentMarker =
-            (Token.Comment comment) ->
-            {
-                String value = comment.value();
-                String stripped = value.startsWith(";")
-                        ? value.substring(1).strip()
-                        : value.strip(); // fallback
-                return new Token.Comment(comment.position(), stripped);
-            };
 
-    public static void main(String[] args)
+    /// Creates and returns the standard AST rules for Lisp.
+    ///
+    /// @return ASTRules configured for Lisp syntax
+    public static ASTRules create()
     {
-
-        TokenRules lispRules = TokenRules.builder()
-                // Lisp uses parentheses as structure
-                .delimeter("(")
-                .delimeter(")")
-
-                // Quote characters
-                .operator("'")   // Quote
-                .operator("`")   // Quasiquote
-                .operator(",")   // Unquote
-                .operator(",@")  // Unquote-splicing
-
-                // Identifiers (symbols, function names)
-                .identifier("symbol", "[^\\s(),'`,@:]+") // Updated to exclude colon and quote characters
-                .identifier("keyword", ":[^\\s(),'`,@]+") // Keywords start with colon
-
-                // Numbers
-                .literal("integer", "[+-]?[0-9]+")
-                .literal("float", "[+-]?[0-9]*\\.[0-9]+")
-                .literal("boolean", "#t|#f")
-                .literal("nil", "nil")
-
-                // Character literals
-                .literal("character", "#\\\\.")
-
-                // Strings
-                .literal("string", "^\"(?:\\\\.|[^\"\\\\])*\"")
-
-                // Comments (Lisp often uses ';' for line comments)
-                .comment(";.*")
-
-                // Settings
-                .whitespaceMode(WhitespaceMode.IGNORE)
-                .enableLongestMatchFirst()
-                .makeCaseSensitive()
-                .build();
-
-
-        TokenPostProcessor lispPost = TokenPostProcessor.builder()
-                .literal("string", TokenTransformations::processEscapeSequences)
-                .literal("string", TokenTransformations::unquoteAndTrimIndentation)
-                .literal("integer", TokenTransformations::normalizeInteger)
-                .literal("float", TokenTransformations::normalizeFloat)
-                .comment("comment", Main.stripLispCommentMarker)
-                .build();
-
-
-        ASTRules rules = ASTRules.builder()
+        return ASTRules.builder()
                 .topRule(List.of("expr")) // Top Rule defines the types of elements that can be at the top layer of the AST.
                 .ignoreComments(true) // Enable comment skipping to avoid errors with comments
                 .startRule("expr") // ASTRuleTemplate — top-level expression
@@ -177,7 +123,6 @@ public class Main
                 .literal("character", self -> token -> self.put("value", token.getValue()))
                 .endDefinition(self -> () -> new LispAtom.LispCharacter(self.get("value", String.class).charAt(2)))
 
-
                 // ----- Symbol -----
                 .addDefinition("symbol")
                 .identifier("symbol", self -> token -> self.put("value", token.getValue()))
@@ -195,47 +140,6 @@ public class Main
                 })
                 .endDefinition(self -> () -> LispAtom.LispNil.INSTANCE)
 
-
                 .build();
-
-        String lispCode = """
-                ; Test with a simple missing closing parenthesis
-                ((define x 10
-                
-                ; Test with a misplaced closing parenthesis
-                (foo bar) baz)
-                
-                ; Test with balanced parentheses for comparison
-                (alpha (beta) gamma)
-                """;
-
-        TokenList lispTokens = TokenList.create(lispCode, lispRules, lispPost);
-
-        System.out.println("\n=== Tokens ===");
-        System.out.println(lispTokens);
-
-        ErrorManager errorManager = new ErrorManager();
-
-        errorManager.setContext("lisp", lispCode);
-
-        ASTWrapper astWrapper = rules.createAST(lispTokens, errorManager);
-
-
-        if (errorManager.hasErrors())
-            errorManager.printReports(System.out);
-        else
-        {
-            LispAST ast = LispAST.fromASTWrapper(astWrapper);
-
-            System.out.println("\n=== AST Tree Structure ===");
-            System.out.println(ast.printTree(0));
-
-            System.out.println("\n=== Regenerated Lisp Code ===");
-            System.out.println(ast.generateCode());
-
-            System.out.println("\n=== Original Code ===");
-            System.out.println(lispCode);
-
-        }
     }
 }

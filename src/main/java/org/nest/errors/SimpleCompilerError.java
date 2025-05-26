@@ -7,29 +7,35 @@ public record SimpleCompilerError(
         int column,
         String token,
         String hint
-) implements CompilerError {
+) implements CompilerError
+{
     @Override
-    public String getMessage() {
+    public String getMessage()
+    {
         return message;
     }
 
     @Override
-    public int getLine() {
+    public int getLine()
+    {
         return line;
     }
 
     @Override
-    public int getColumn() {
+    public int getColumn()
+    {
         return column;
     }
 
     @Override
-    public String getToken() {
+    public String getToken()
+    {
         return token;
     }
 
     @Override
-    public String getHint() {
+    public String getHint()
+    {
         return hint;
     }
 }

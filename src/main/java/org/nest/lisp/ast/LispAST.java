@@ -6,76 +6,188 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+
 /// Root of the Lisp Abstract Syntax Tree.
 /// Provides methods to convert from ASTWrapper, print as tree, and generate code.
-public record LispAST(List<LispNode> nodes) {
+public record LispAST(List<LispNode> nodes)
+{
     /// Creates a LispAST from an ASTWrapper containing parsed nodes
+    ///
     /// @param wrapper The ASTWrapper containing parsed AST nodes
     /// @return A new LispAST containing the converted nodes
-    public static LispAST fromASTWrapper(ASTWrapper wrapper) {
-        if (wrapper.hasErrors() || wrapper.get() == null) {
+    public static LispAST fromASTWrapper(ASTWrapper wrapper)
+    {
+        if (wrapper.hasErrors() || wrapper.get() == null)
+        {
             return new LispAST(new ArrayList<>());
         }
-        
+
         List<LispNode> nodes = new ArrayList<>();
-        for (Object obj : wrapper.get()) {
-            if (obj instanceof LispNode node) {
-                nodes.add(node);
-            } else {
+        List<Object> rawObjects = wrapper.get();
+
+        // Process all objects in the wrapper
+        for (int i = 0; i < rawObjects.size(); i++)
+        {
+            Object obj = rawObjects.get(i);
+            if (!(obj instanceof LispNode)) continue;
+
+            // Special case for 'define' expressions: (define (name args...) body)
+            if (obj instanceof LispAtom.LispSymbol(String name) && name.equals("define"))
+            {
+                LispAtom.LispSymbol symbol = (LispAtom.LispSymbol) obj;
+                // Get the next object which should be either a symbol (for variable definitions)
+                // or a list (for function definitions)
+                if (i + 1 < rawObjects.size())
+                {
+                    Object nextObj = rawObjects.get(i + 1);
+
+                    if (nextObj instanceof LispList functionNameAndArgs)
+                    {
+                        // This is a function definition: (define (name args...) body)
+                        List<LispNode> defineElements = new ArrayList<>();
+                        defineElements.add(symbol); // 'define'
+                        defineElements.add(functionNameAndArgs); // '(name args...)'
+
+                        // Find the function body
+                        // We need to collect all expressions that form the function body
+                        // until we get to another top-level expression or end of input
+                        int bodyStart = i + 2;
+                        if (bodyStart < rawObjects.size())
+                        {
+                            // Add the function body (may be multiple expressions)
+                            defineElements.add((LispNode) rawObjects.get(bodyStart));
+
+                            // Skip over the elements we've processed
+                            i = bodyStart;
+                        }
+                        else
+                        {
+                            // No body found, just a function signature
+                            i++; // Skip just the function name/args
+                        }
+
+                        // Add the complete define expression to the nodes list
+                        nodes.add(new LispList(defineElements));
+                    }
+                    else if (nextObj instanceof LispNode nameNode && i + 2 < rawObjects.size())
+                    {
+                        // This is a variable definition: (define name value)
+                        Object valueObj = rawObjects.get(i + 2);
+                        if (valueObj instanceof LispNode valueNode)
+                        {
+                            List<LispNode> defineElements = new ArrayList<>();
+                            defineElements.add(symbol); // 'define'
+                            defineElements.add(nameNode); // name
+                            defineElements.add(valueNode); // value
+
+                            nodes.add(new LispList(defineElements));
+                            i += 2; // Skip over the elements we've processed
+                        }
+                        else
+                        {
+                            // If value is not a LispNode, just add the symbol alone
+                            nodes.add((LispNode) obj);
+                        }
+                    }
+                    else
+                    {
+                        // If the next object is not as expected, just add the symbol
+                        nodes.add((LispNode) obj);
+                    }
+                }
+                else
+                {
+                    // If there's no next object, just add the symbol
+                    nodes.add((LispNode) obj);
+                }
+            }
+            // For any other top-level expression
+            else
+            {
+                nodes.add((LispNode) obj);
             }
         }
+
         return new LispAST(nodes);
     }
-    
+
     /// Prints the AST as a tree structure
+    ///
     /// @param indent The indentation level (used for recursive calls)
     /// @return A string representation of the AST as a tree
-    public String printTree(int indent) {
+    public String printTree(int indent)
+    {
         StringBuilder sb = new StringBuilder();
         sb.append("LispAST {\n");
-        
-        for (LispNode node : nodes) {
+
+        for (LispNode node : nodes)
+        {
             sb.append("  ".repeat(indent + 1));
-            if (node instanceof LispList list) {
+            if (node instanceof LispList(List<LispNode> elements))
+            {
                 sb.append("List [\n");
-                List<LispNode> elements = list.elements();
-                if (elements != null) {
-                    for (LispNode element : elements) {
+                if (elements != null)
+                {
+                    for (LispNode element : elements)
+                    {
                         sb.append("  ".repeat(indent + 2));
                         sb.append(printNodeTree(element, indent + 2));
                         sb.append("\n");
                     }
                 }
                 sb.append("  ".repeat(indent + 1)).append("]");
-            } else {
+            }
+            else
+            {
                 sb.append(printNodeTree(node, indent + 1));
             }
             sb.append("\n");
         }
-        
+
         sb.append("  ".repeat(indent)).append("}");
         return sb.toString();
     }
-    
+
     /**
      * Helper method to print a node in the tree
      */
-    private String printNodeTree(LispNode node, int indent) {
-        if (node instanceof LispAtom.LispSymbol symbol) {
-            return "Symbol(" + symbol.name() + ")";
-        } else if (node instanceof LispAtom.LispString str) {
-            return "String(\"" + str.value() + "\")";
-        } else if (node instanceof LispAtom.LispNumber num) {
-            return "Number(" + num.value() + ")";
-        } else if (node instanceof LispAtom.LispBoolean bool) {
-            return "Boolean(" + bool.value() + ")";
-        } else if (node instanceof LispAtom.LispNil) {
+    private String printNodeTree(LispNode node, int indent)
+    {
+        if (node instanceof LispAtom.LispSymbol(String name))
+        {
+            return "Symbol(" + name + ")";
+        }
+        else if (node instanceof LispAtom.LispString(String value))
+        {
+            return "String(\"" + value + "\")";
+        }
+        else if (node instanceof LispAtom.LispNumber(String value))
+        {
+            return "Number(" + value + ")";
+        }
+        else if (node instanceof LispAtom.LispBoolean(boolean value))
+        {
+            return "Boolean(" + value + ")";
+        }
+        else if (node instanceof LispAtom.LispCharacter(char value))
+        {
+            return "Character('" + value + "')";
+        }
+        else if (node instanceof LispAtom.LispKeyword(String name))
+        {
+            return "Keyword(:" + name + ")";
+        }
+        else if (node instanceof LispAtom.LispNil)
+        {
             return "Nil";
-        } else if (node instanceof LispList list) {
+        }
+        else if (node instanceof LispList(List<LispNode> elements))
+        {
             StringBuilder sb = new StringBuilder("List [\n");
-            List<LispNode> elements = list.elements();
-            if (elements != null) {
-                for (LispNode element : elements) {
+            if (elements != null)
+            {
+                for (LispNode element : elements)
+                {
                     sb.append("  ".repeat(indent + 1));
                     sb.append(printNodeTree(element, indent + 1));
                     sb.append("\n");
@@ -86,21 +198,24 @@ public record LispAST(List<LispNode> nodes) {
         }
         return node.toString();
     }
-    
+
     /**
      * Regenerates the original Lisp code from this AST
+     *
      * @return A string of the regenerated Lisp code
      */
-    public String generateCode() {
+    public String generateCode()
+    {
         return nodes.stream()
                 .map(this::generateNodeCode)
                 .collect(Collectors.joining("\n"));
     }
-    
+
     /**
      * Helper method to generate code for a specific node
      */
-    private String generateNodeCode(LispNode node) {
+    private String generateNodeCode(LispNode node)
+    {
         switch (node)
         {
             case LispAtom.LispSymbol symbol ->
@@ -117,7 +232,15 @@ public record LispAST(List<LispNode> nodes) {
             }
             case LispAtom.LispBoolean bool ->
             {
-                return bool.value() ? "true" : "false";
+                return bool.value() ? "#t" : "#f";
+            }
+            case LispAtom.LispCharacter ch ->
+            {
+                return "#\\" + ch.value();
+            }
+            case LispAtom.LispKeyword keyword ->
+            {
+                return ":" + keyword.name();
             }
             case LispAtom.LispNil lispNil ->
             {
@@ -140,9 +263,10 @@ public record LispAST(List<LispNode> nodes) {
         }
         return node.toString();
     }
-    
+
     @Override
-    public String toString() {
+    public String toString()
+    {
         return printTree(0);
     }
 }

@@ -21,7 +21,7 @@ public class ASTRulesBuilder
     ///
     /// in the above code we'd have the following top rules: `struct`, `function`
     List<String> topRules;
-    
+
     /// Whether to ignore comment tokens during parsing
     boolean ignoreComments = false;
 

@@ -20,13 +20,13 @@ public class ASTDefinitionTemplate
         definition = new Definition(name);
     }
 
-    ASTDefinitionTemplate keyword(String value, TokenAction action)
+    public ASTDefinitionTemplate keyword(String value, TokenAction action)
     {
         definition.addStep(new Step.Keyword(value, action));
         return this;
     }
 
-    ASTDefinitionTemplate operator(String value, TokenAction action)
+    public ASTDefinitionTemplate operator(String value, TokenAction action)
     {
         definition.addStep(new Step.Operator(value, action));
         return this;

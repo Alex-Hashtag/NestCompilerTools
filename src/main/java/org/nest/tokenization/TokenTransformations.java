@@ -53,7 +53,8 @@ public final class TokenTransformations
      * @param lit the literal token to transform; expected to be of type "string"
      * @return a new {@link Token.Literal} with escape sequences replaced.
      */
-    public static Token.Literal processEscapeSequences(Token.Literal lit) {
+    public static Token.Literal processEscapeSequences(Token.Literal lit)
+    {
         String value = lit.value();
         StringBuilder processed = new StringBuilder();
 
@@ -62,7 +63,8 @@ public final class TokenTransformations
         Matcher matcher = pattern.matcher(value);
 
         int lastIndex = 0;
-        while (matcher.find()) {
+        while (matcher.find())
+        {
             processed.append(value, lastIndex, matcher.start());
 
             String match = matcher.group(1);

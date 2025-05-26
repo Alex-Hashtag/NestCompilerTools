@@ -5,6 +5,7 @@ import org.nest.ast.state.Rule;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /// ASTRuleTemplate is used to build a rule chain.
 /// It is used to keep track of the top rules while the pipeline is being built.
 public class ASTRuleTemplate
