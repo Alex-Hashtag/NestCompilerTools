@@ -8,58 +8,102 @@ import org.nest.ast.state.Step;
 import java.util.ArrayList;
 import java.util.List;
 
-
-public class ASTDefinitionTemplateOptional
+/// Template for defining optional steps in an AST rule.
+///
+/// @param <O> The type parameter for this optional template (self-type)
+/// @param <P> The type of the parent template
+public class ASTDefinitionTemplateOptional<O extends ASTDefinitionStepTemplate<O>, P extends ASTDefinitionStepTemplate<P>>
+    implements ASTDefinitionStepTemplate<ASTDefinitionTemplateOptional<O, P>>
 {
-    ASTDefinitionTemplate astDefinitionTemplateCaller;
-
+    P parent;
     List<Step> children;
 
-    ASTDefinitionTemplateOptional(ASTDefinitionTemplate astDefinitionTemplate)
+    ASTDefinitionTemplateOptional(P parent)
     {
-        this.astDefinitionTemplateCaller = astDefinitionTemplate;
+        this.parent = parent;
         children = new ArrayList<>();
     }
 
-    public ASTDefinitionTemplateOptional keyword(String value, TokenAction action)
+    @Override
+    public ASTDefinitionTemplateOptional<O, P> keyword(String value, TokenAction action)
     {
         children.add(new Step.Keyword(value, action));
         return this;
     }
 
-    public ASTDefinitionTemplateOptional operator(String value, TokenAction action)
+    @Override
+    public ASTDefinitionTemplateOptional<O, P> operator(String value, TokenAction action)
     {
         children.add(new Step.Operator(value, action));
         return this;
     }
 
-    public ASTDefinitionTemplateOptional delimiter(String value, TokenAction action)
+    @Override
+    public ASTDefinitionTemplateOptional<O, P> delimiter(String value, TokenAction action)
     {
         children.add(new Step.Delimiter(value, action));
         return this;
     }
 
-    public ASTDefinitionTemplateOptional identifier(String type, TokenAction action)
+    @Override
+    public ASTDefinitionTemplateOptional<O, P> identifier(String type, TokenAction action)
     {
         children.add(new Step.Identifier(type, action));
         return this;
     }
 
-    public ASTDefinitionTemplateOptional literal(String type, TokenAction action)
+    @Override
+    public ASTDefinitionTemplateOptional<O, P> literal(String type, TokenAction action)
     {
         children.add(new Step.Literal(type, action));
         return this;
     }
 
-    public ASTDefinitionTemplateOptional rule(String ruleName, ASTNodeConsumer consumer)
+    @Override
+    public ASTDefinitionTemplateOptional<O, P> rule(String ruleName, ASTNodeConsumer consumer)
     {
         children.add(new Step.Rule(ruleName, consumer));
         return this;
     }
 
-    public ASTDefinitionTemplate otherwise(ASTAction fallback)
+    @Override
+    public <R extends ASTDefinitionStepTemplate<R>> ASTDefinitionTemplateRepeat<R, ASTDefinitionTemplateOptional<O, P>> repeat(ASTAction initializer)
     {
-        this.astDefinitionTemplateCaller.definition.addStep(new Step.Optional(children, fallback));
-        return this.astDefinitionTemplateCaller;
+        return new ASTDefinitionTemplateRepeat<>(initializer, this);
+    }
+
+    @Override
+    public <NO extends ASTDefinitionStepTemplate<NO>> ASTDefinitionTemplateOptional<NO, ASTDefinitionTemplateOptional<O, P>> optional()
+    {
+        return new ASTDefinitionTemplateOptional<>(this);
+    }
+
+    @Override
+    public <C extends ASTDefinitionStepTemplate<C>> ASTDefinitionTemplateChoice<C, ASTDefinitionTemplateOptional<O, P>> choice()
+    {
+        return new ASTDefinitionTemplateChoice<>(this);
+    }
+
+    /// Ends this optional template and returns to the parent template.
+    ///
+    /// @param fallback The action to perform if the optional steps don't match
+    /// @return The parent template
+    public P otherwise(ASTAction fallback)
+    {
+        switch (parent)
+        {
+            case ASTDefinitionTemplate astDefTemplate ->
+                    astDefTemplate.definition.addStep(new Step.Optional(children, fallback));
+            case ASTDefinitionTemplateRepeat<?, ?> astRepeatTemplate ->
+                    astRepeatTemplate.children.add(new Step.Optional(children, fallback));
+            case ASTDefinitionTemplateOptional<?, ?> astOptionalTemplate ->
+                    astOptionalTemplate.children.add(new Step.Optional(children, fallback));
+            case ASTDefinitionTemplateChoice<?, ?> astChoiceTemplate ->
+                    astChoiceTemplate.currentAlternative.add(new Step.Optional(children, fallback));
+            case null, default ->
+            {
+            }
+        }
+        return parent;
     }
 }
