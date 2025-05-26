@@ -14,7 +14,7 @@ public class LispParserExample
         // Example Lisp code
         String lispCode = """
                 ; Test with a simple missing closing parenthesis
-                ((define x 10
+                ((define x 10)
                 
                 ; Test with a misplaced closing parenthesis
                 (foo bar) baz)

@@ -65,6 +65,11 @@ public class ASTDefinitionTemplate
     {
         return new ASTDefinitionTemplateOptional(this);
     }
+    
+    public ASTDefinitionTemplateChoice choice()
+    {
+        return new ASTDefinitionTemplateChoice(this);
+    }
 
     public ASTRuleTemplate endDefinition(ASTNodeSupplier supplier)
     {

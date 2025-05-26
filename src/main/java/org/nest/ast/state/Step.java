@@ -8,7 +8,7 @@ import java.util.List;
 
 
 public sealed interface Step permits Step.Keyword, Step.Literal, Step.Identifier, Step.Operator,
-        Step.Delimiter, Step.Rule, Step.Repeat, Step.Optional
+        Step.Delimiter, Step.Rule, Step.Repeat, Step.Optional, Step.Choice
 {
 
     record Keyword(String value, TokenAction action) implements Step
@@ -40,6 +40,10 @@ public sealed interface Step permits Step.Keyword, Step.Literal, Step.Identifier
     }
 
     record Optional(List<Step> children, ASTAction fallback) implements Step
+    {
+    }
+    
+    record Choice(List<List<Step>> alternatives) implements Step
     {
     }
 }

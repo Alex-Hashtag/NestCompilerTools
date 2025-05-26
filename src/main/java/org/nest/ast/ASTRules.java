@@ -16,7 +16,6 @@ import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-
 public class ASTRules
 {
     // Maximum token preview length for error messages
@@ -211,7 +210,7 @@ public class ASTRules
                 // Generate a more helpful error message with expected tokens
                 String errorMessage = buildDetailedErrorMessage(tokenValue, tokenType, allExpectedTokens, ruleToExpectedTokens);
 
-                // Generate a helpful hint based on the context
+                // Generate a helpful hint based on the error context
                 String hint = generateHint(currentToken, allExpectedTokens, bestTokensConsumed);
 
                 errors.error(
@@ -1017,6 +1016,94 @@ public class ASTRules
                 // An optional step always succeeds, regardless of whether its content matched
                 return true;
             }
+            case Step.Choice choice ->
+            {
+                // Try each alternative in sequence, use the first one that matches
+                List<Token> bestTokens = null;
+                List<Object> bestNodes = null;
+                Map<String, Object> bestLocalData = null;
+                boolean anyMatched = false;
+                
+                int maxConsumedTokens = 0;
+                
+                // For error reporting
+                List<String> allExpectedTokens = new ArrayList<>();
+                
+                // Try each alternative
+                for (List<Step> alternative : choice.alternatives())
+                {
+                    // Save position before trying this alternative
+                    int savePos = cursor.savePosition();
+                    
+                    // Clone local data for this attempt
+                    Map<String, Object> alternativeLocalData = new HashMap<>(localData);
+                    
+                    // Try to match all steps in this alternative
+                    List<Token> alternativeTokens = new ArrayList<>();
+                    List<Object> alternativeNodes = new ArrayList<>();
+                    boolean allStepsMatched = true;
+                    
+                    for (Step step1 : alternative)
+                    {
+                        boolean stepMatched = matchStep(
+                                cursor, step1, ruleMap, alternativeTokens, alternativeNodes, 
+                                alternativeLocalData, errors);
+                        
+                        if (!stepMatched)
+                        {
+                            // If we expected tokens, collect them for error reporting
+                            allStepsMatched = false;
+                            break;
+                        }
+                    }
+                    
+                    if (allStepsMatched)
+                    {
+                        // This alternative fully matched
+                        // If it consumed more tokens than previous alternatives, make it the best
+                        if (!anyMatched || alternativeTokens.size() > maxConsumedTokens)
+                        {
+                            bestTokens = alternativeTokens;
+                            bestNodes = alternativeNodes;
+                            bestLocalData = alternativeLocalData;
+                            maxConsumedTokens = alternativeTokens.size();
+                            anyMatched = true;
+                            
+                            // Commit this position
+                            cursor.commitPosition();
+                            
+                            // In strict mode, we'd break here to use the first match
+                            // For longest match strategy, continue to try other alternatives
+                        }
+                        else
+                        {
+                            // Not better than what we have, backtrack
+                            cursor.backtrack();
+                        }
+                    }
+                    else
+                    {
+                        // This alternative didn't match, backtrack
+                        cursor.backtrack();
+                    }
+                }
+                
+                if (anyMatched)
+                {
+                    // Use the best match we found
+                    consumedTokens.addAll(bestTokens);
+                    childNodes.addAll(bestNodes);
+                    
+                    // Transfer best local data back to the caller's local data
+                    localData.clear();
+                    localData.putAll(bestLocalData);
+                    
+                    return true;
+                }
+                
+                // No alternatives matched
+                return false;
+            }
             case null, default ->
             {
             }
@@ -1224,9 +1311,9 @@ public class ASTRules
     }
 
     /// Node in the rule tree representing a definition with its potential matching characteristics.
-        private record RuleTreeNode(Definition definition)
-        {
-        }
+    private record RuleTreeNode(Definition definition)
+    {
+    }
 
     /// Represents a type of token for matching in the rule tree.
     private record TokenType(TokenKind kind, String value)
