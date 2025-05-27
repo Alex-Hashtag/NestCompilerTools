@@ -21,9 +21,7 @@ public class ASTBuildContext
     {
         Object value = context.get(key);
         if (value == null || !clazz.isAssignableFrom(value.getClass()))
-        {
             return null;
-        }
         return (T) value;
     }
 
@@ -38,9 +36,7 @@ public class ASTBuildContext
     {
         Object value = context.get(key);
         if (!(value instanceof List<?> list))
-        {
             return List.of();
-        }
 
         return list.stream()
                 .filter(item -> item != null && clazz.isAssignableFrom(item.getClass()))
