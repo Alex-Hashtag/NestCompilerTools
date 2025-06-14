@@ -20,8 +20,6 @@ public class ASTRules
 {
     // Maximum token preview length for error messages
     private static final int MAX_TOKEN_PREVIEW_LENGTH = 15;
-    // Stack of contexts for nested rule processing
-    private final Deque<ASTBuildContext> contextStack = new ArrayDeque<>();
     // Cache of rule trees for faster matching
     private final Map<String, RuleTree> ruleTrees = new HashMap<>();
     // Track the current parsing path for better error reporting
@@ -64,6 +62,13 @@ public class ASTRules
             ruleTrees.put(rule.getName(), tree);
         }
     }
+
+    // TODO: Create List<Object> extractAll(String ruleName) and List<Object> extractAll(String ruleName, String definitionName)
+    //  methods that will take a rule name and optional definition name and return a list of all extracted nodes. It will also delete the nodes
+    //  Ex: extract all import statements before parsing to be used in the context of the parsing
+    //  Must also add extractAllCopy that can be used without deleting from the TokenList
+    //  Should consider adding a method which can extract and Copy based on a custom pattern
+
 
     /// Creates an Abstract Syntax Tree (AST) from a token list.
     ///
@@ -160,7 +165,8 @@ public class ASTRules
 
                     // Track the best partial match
                     int tokensConsumed = result.consumedTokens != null ? result.consumedTokens.size() : 0;
-                    if (tokensConsumed > bestTokensConsumed)
+                    if (tokensConsumed > bestTokensConsumed || 
+                        (tokensConsumed == bestTokensConsumed && result.definition != null && result.definition.hint != null))
                     {
                         bestTokensConsumed = tokensConsumed;
                         bestErrorMatch = result;
@@ -207,14 +213,16 @@ public class ASTRules
                     column = currentToken.position().column();
                 }
 
-                // Generate a more helpful error message with expected tokens
-                String errorMessage = buildDetailedErrorMessage(tokenValue, tokenType, allExpectedTokens, ruleToExpectedTokens);
+                // Collect error information from the best error match
+                String customHint = null;
+                if (bestErrorMatch != null && bestErrorMatch.definition != null && bestErrorMatch.definition.hint != null)
+                    customHint = bestErrorMatch.definition.hint;
 
-                // Generate a helpful hint based on the error context
-                String hint = generateHint(currentToken, allExpectedTokens, bestTokensConsumed);
+                String message = buildDetailedErrorMessage(tokenValue, tokenType, allExpectedTokens, ruleToExpectedTokens);
+                String hint = generateHint(currentToken, allExpectedTokens, bestTokensConsumed, customHint);
 
                 errors.error(
-                        errorMessage,
+                        message,
                         line, column, tokenValue, hint);
 
                 // Skip this token and continue
@@ -306,6 +314,16 @@ public class ASTRules
     /// Generates a helpful hint based on the error context
     private String generateHint(Token token, List<String> expectedTokens, int bestTokensConsumed)
     {
+        return generateHint(token, expectedTokens, bestTokensConsumed, null);
+    }
+    
+    /// Generates a helpful hint based on the error context, with optional custom hint
+    private String generateHint(Token token, List<String> expectedTokens, int bestTokensConsumed, String customHint)
+    {
+        // If there's a custom hint provided, use it instead of the generated hint
+        if (customHint != null && !customHint.isEmpty())
+            return customHint;
+            
         if (token == null || token instanceof Token.End)
             return "Unexpected end of file. The syntax may be incomplete.";
 
@@ -454,7 +472,8 @@ public class ASTRules
             {
                 // Even if it didn't match, track the best error information
                 int tokensConsumed = result.consumedTokens != null ? result.consumedTokens.size() : 0;
-                if (tokensConsumed > bestErrorTokensConsumed)
+                if (tokensConsumed > bestErrorTokensConsumed || 
+                    (tokensConsumed == bestErrorTokensConsumed && result.definition != null && result.definition.hint != null))
                 {
                     bestErrorMatch = result;
                     bestErrorTokensConsumed = tokensConsumed;
@@ -486,10 +505,26 @@ public class ASTRules
         else if (bestErrorMatch != null)
         {
             // No match, but we have error information
-            // Create a new error result with combined error information
+            // Get the original definition from the rule to ensure we have the correct hint
+            Definition originalDef = null;
+            if (bestErrorMatch.definition != null) {
+                // Try to find the original definition with the hint in the rule
+                for (Definition def : ruleTree.getRule().getDefinitions()) {
+                    if (def.name != null && def.name.equals(bestErrorMatch.definition.name)) {
+                        originalDef = def;
+                        break;
+                    }
+                }
+            }
+
+            // Use the original definition if found (it should have the hint), otherwise use the one from bestErrorMatch
+            Definition defToUse = originalDef != null ? originalDef : bestErrorMatch.definition;
+
+            
+            // Create a new error result with combined error information and the correct definition with hint
             return new MatchResult(
                     false,
-                    bestErrorMatch.definition,
+                    defToUse,
                     bestErrorMatch.consumedTokens,
                     bestErrorMatch.childNodes,
                     bestErrorMatch.localData,
@@ -562,7 +597,8 @@ public class ASTRules
                 {
                     // Even if it didn't match, track the best error information
                     int tokensConsumed = result.consumedTokens != null ? result.consumedTokens.size() : 0;
-                    if (tokensConsumed > bestErrorTokensConsumed)
+                    if (tokensConsumed > bestErrorTokensConsumed || 
+                        (tokensConsumed == bestErrorTokensConsumed && result.definition != null && result.definition.hint != null))
                     {
                         bestErrorMatch = result;
                         bestErrorTokensConsumed = tokensConsumed;
@@ -928,7 +964,8 @@ public class ASTRules
                     for (Step childStep : repeat.children())
                     {
                         boolean childMatched = matchStep(
-                                cursor, childStep, ruleMap, repeatTokens, repeatNodes, repeatLocalData, errors);
+                                cursor, childStep, ruleMap, repeatTokens, repeatNodes, 
+                                repeatLocalData, errors);
 
                         if (!childMatched)
                         {

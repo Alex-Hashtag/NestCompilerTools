@@ -42,7 +42,7 @@ public final class TokenRules
             return this;
         }
 
-        public TokenRulesBuilder delimeter(String value)
+        public TokenRulesBuilder delimiter(String value)
         {
             tokenPrototypes.add(new TokenPrototype.Delimiter(value));
             return this;

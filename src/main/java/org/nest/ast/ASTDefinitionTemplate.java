@@ -138,4 +138,17 @@ public class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<ASTDefin
         astRuleTemplateCaller.currentRuleBeingBuilt.addDefinition(definition);
         return astRuleTemplateCaller;
     }
+
+    /// Ends the definition and adds it to the ASTRuleTemplate with a custom error hint.
+    ///
+    /// @param supplier The supplier to use when the definition is encountered.
+    /// @param hint A custom hint to display when parsing fails for this definition.
+    /// @return The ASTRuleTemplate.
+    public ASTRuleTemplate endDefinition(ASTNodeSupplier supplier, String hint)
+    {
+        definition.builder = supplier;
+        definition.hint = hint;
+        astRuleTemplateCaller.currentRuleBeingBuilt.addDefinition(definition);
+        return astRuleTemplateCaller;
+    }
 }

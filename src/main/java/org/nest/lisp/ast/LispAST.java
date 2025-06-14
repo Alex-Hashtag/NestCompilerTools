@@ -1,11 +1,11 @@
 package org.nest.lisp.ast;
 
 import org.nest.ast.ASTWrapper;
+import org.nest.tokenization.Coordinates;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-
 
 /// Root of the Lisp Abstract Syntax Tree.
 /// Provides methods to convert from ASTWrapper, print as tree, and generate code.
@@ -125,7 +125,7 @@ public record LispAST(List<LispNode> nodes)
             sb.append("  ".repeat(indent + 1));
             if (node instanceof LispList(List<LispNode> elements))
             {
-                sb.append("List [\n");
+                sb.append("List [").append("\n");
                 if (elements != null)
                 {
                     for (LispNode element : elements)
@@ -153,48 +153,54 @@ public record LispAST(List<LispNode> nodes)
      */
     private String printNodeTree(LispNode node, int indent)
     {
-        if (node instanceof LispAtom.LispSymbol(String name))
+        switch (node)
         {
-            return "Symbol(" + name + ")";
-        }
-        else if (node instanceof LispAtom.LispString(String value))
-        {
-            return "String(\"" + value + "\")";
-        }
-        else if (node instanceof LispAtom.LispNumber(String value))
-        {
-            return "Number(" + value + ")";
-        }
-        else if (node instanceof LispAtom.LispBoolean(boolean value))
-        {
-            return "Boolean(" + value + ")";
-        }
-        else if (node instanceof LispAtom.LispCharacter(char value))
-        {
-            return "Character('" + value + "')";
-        }
-        else if (node instanceof LispAtom.LispKeyword(String name))
-        {
-            return "Keyword(:" + name + ")";
-        }
-        else if (node instanceof LispAtom.LispNil)
-        {
-            return "Nil";
-        }
-        else if (node instanceof LispList(List<LispNode> elements))
-        {
-            StringBuilder sb = new StringBuilder("List [\n");
-            if (elements != null)
+            case LispAtom.LispSymbol(String name) ->
             {
-                for (LispNode element : elements)
-                {
-                    sb.append("  ".repeat(indent + 1));
-                    sb.append(printNodeTree(element, indent + 1));
-                    sb.append("\n");
-                }
+                return "Symbol(" + name + ")";
             }
-            sb.append("  ".repeat(indent)).append("]");
-            return sb.toString();
+            case LispAtom.LispString(String value) ->
+            {
+                return "String(\"" + value + "\")";
+            }
+            case LispAtom.LispNumber(String value) ->
+            {
+                return "Number(" + value + ")";
+            }
+            case LispAtom.LispBoolean(boolean value) ->
+            {
+                return "Boolean(" + value + ")";
+            }
+            case LispAtom.LispCharacter(char value) ->
+            {
+                return "Character('" + value + "')";
+            }
+            case LispAtom.LispKeyword(String name) ->
+            {
+                return "Keyword(:" + name + ")";
+            }
+            case LispAtom.LispNil lispNil ->
+            {
+                return "Nil";
+            }
+            case LispList(List<LispNode> elements) ->
+            {
+                StringBuilder sb = new StringBuilder("List [").append("\n");
+                if (elements != null)
+                {
+                    for (LispNode element : elements)
+                    {
+                        sb.append("  ".repeat(indent + 1));
+                        sb.append(printNodeTree(element, indent + 1));
+                        sb.append("\n");
+                    }
+                }
+                sb.append("  ".repeat(indent)).append("]");
+                return sb.toString();
+            }
+            case null, default ->
+            {
+            }
         }
         return node.toString();
     }

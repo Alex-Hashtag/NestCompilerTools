@@ -1,241 +1,178 @@
 package org.nest;
 
-import org.nest.ast.ASTRules;
-import org.nest.ast.ASTWrapper;
-import org.nest.errors.ErrorManager;
-import org.nest.lisp.ast.LispAST;
-import org.nest.lisp.ast.LispAtom;
-import org.nest.lisp.ast.LispList;
-import org.nest.lisp.ast.LispNode;
-import org.nest.tokenization.*;
+import org.bytedeco.llvm.LLVM.*;
+import org.bytedeco.llvm.global.LLVM;
+import org.bytedeco.javacpp.BytePointer;
+import org.nest.ast.generation.llvm.*;
+import org.nest.ast.generation.llvm.types.Type;
+import org.nest.ast.generation.llvm.types.StructType;
+import org.nest.ast.generation.llvm.types.ArrayType;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Paths;
 
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Starting LLVM IR generation with struct types demonstration");
 
-public class Main
-{
-    public static final java.util.function.Function<Token.Comment, Token.Comment> stripLispCommentMarker =
-            (Token.Comment comment) ->
-            {
-                String value = comment.value();
-                String stripped = value.startsWith(";")
-                        ? value.substring(1).strip()
-                        : value.strip(); // fallback
-                return new Token.Comment(comment.position(), stripped);
-            };
+        try {
+            System.out.println("Initializing LLVM...");
 
-    public static void main(String[] args)
-    {
+            Context context = Context.create();
+            LLVMContextRef contextRef = context.getContextRef();
+            LLVMModuleRef moduleRef = context.getModuleRef();
 
-        TokenRules lispRules = TokenRules.builder()
-                // Lisp uses parentheses as structure
-                .delimeter("(")
-                .delimeter(")")
+            try {
+                // Define the main function (int main())
+                Type returnType = context.types().i32();
+                Type[] mainParams = new Type[0];
+                Function mainFunction = context.defineFunction("main", returnType, mainParams, false);
+                System.out.println("Created main function");
 
-                // Quote characters
-                .operator("'")   // Quote
-                .operator("`")   // Quasiquote
-                .operator(",")   // Unquote
-                .operator(",@")  // Unquote-splicing
-
-                // Identifiers (symbols, function names)
-                .identifier("symbol", "[^\\s(),'`,@:]+") // Updated to exclude colon and quote characters
-                .identifier("keyword", ":[^\\s(),'`,@]+") // Keywords start with colon
-
-                // Numbers
-                .literal("integer", "[+-]?[0-9]+")
-                .literal("float", "[+-]?[0-9]*\\.[0-9]+")
-                .literal("boolean", "#t|#f")
-                .literal("nil", "nil")
-
-                // Character literals
-                .literal("character", "#\\\\.")
-
-                // Strings
-                .literal("string", "^\"(?:\\\\.|[^\"\\\\])*\"")
-
-                // Comments (Lisp often uses ';' for line comments)
-                .comment(";.*")
-
-                // Settings
-                .whitespaceMode(WhitespaceMode.IGNORE)
-                .enableLongestMatchFirst()
-                .makeCaseSensitive()
-                .build();
-
-
-        TokenPostProcessor lispPost = TokenPostProcessor.builder()
-                .literal("string", TokenTransformations::processEscapeSequences)
-                .literal("string", TokenTransformations::unquoteAndTrimIndentation)
-                .literal("integer", TokenTransformations::normalizeInteger)
-                .literal("float", TokenTransformations::normalizeFloat)
-                .comment("comment", Main.stripLispCommentMarker)
-                .build();
-
-
-        ASTRules rules = ASTRules.builder()
-                .topRule(List.of("expr")) // Top Rule defines the types of elements that can be at the top layer of the AST.
-                .ignoreComments(true) // Enable comment skipping to avoid errors with comments
-                .startRule("expr") // ASTRuleTemplate — top-level expression
-
-                // ----- List Form -----
-                .addDefinition("list")
-                .delimiter("(", self -> token ->
-                {
-                })
-                .repeat(self -> self.put("elements", new ArrayList<LispNode>())) // init empty list
-                .rule("expr", self -> expr -> self.<List<LispNode>>get("elements").add((LispNode) expr))
-                .stopRepeat()
-                .delimiter(")", self -> token ->
-                {
-                })
-                .endDefinition(self -> () -> new LispList(self.get("elements", List.class)))
-
-                // ----- Quote Form -----
-                .addDefinition("quote")
-                .operator("'", self -> token ->
-                {
-                })
-                .rule("expr", self -> expr -> self.put("quoted", expr))
-                .endDefinition(self -> () ->
-                {
-                    // Create a quote list: (quote <expr>)
-                    List<LispNode> elements = new ArrayList<>();
-                    elements.add(new LispAtom.LispSymbol("quote"));
-                    elements.add(self.get("quoted"));
-                    return new LispList(elements);
-                })
-
-                // ----- Quasiquote Form -----
-                .addDefinition("quasiquote")
-                .operator("`", self -> token ->
-                {
-                })
-                .rule("expr", self -> expr -> self.put("quoted", expr))
-                .endDefinition(self -> () ->
-                {
-                    // Create a quasiquote list: (quasiquote <expr>)
-                    List<LispNode> elements = new ArrayList<>();
-                    elements.add(new LispAtom.LispSymbol("quasiquote"));
-                    elements.add(self.get("quoted"));
-                    return new LispList(elements);
-                })
-
-                // ----- Unquote Form -----
-                .addDefinition("unquote")
-                .operator(",", self -> token ->
-                {
-                })
-                .rule("expr", self -> expr -> self.put("unquoted", expr))
-                .endDefinition(self -> () ->
-                {
-                    // Create an unquote list: (unquote <expr>)
-                    List<LispNode> elements = new ArrayList<>();
-                    elements.add(new LispAtom.LispSymbol("unquote"));
-                    elements.add(self.get("unquoted"));
-                    return new LispList(elements);
-                })
-
-                // ----- Unquote-splicing Form -----
-                .addDefinition("unquote-splicing")
-                .operator(",@", self -> token ->
-                {
-                })
-                .rule("expr", self -> expr -> self.put("unquoted", expr))
-                .endDefinition(self -> () ->
-                {
-                    // Create an unquote-splicing list: (unquote-splicing <expr>)
-                    List<LispNode> elements = new ArrayList<>();
-                    elements.add(new LispAtom.LispSymbol("unquote-splicing"));
-                    elements.add(self.get("unquoted"));
-                    return new LispList(elements);
-                })
-
-                // ----- String Literal -----
-                .addDefinition("string")
-                .literal("string", self -> token -> self.put("value", token.getValue()))
-                .endDefinition(self -> () -> new LispAtom.LispString(self.get("value", String.class)))
-
-                // ----- Integer Literal -----
-                .addDefinition("int")
-                .literal("integer", self -> token -> self.put("value", token.getValue()))
-                .endDefinition(self -> () -> new LispAtom.LispNumber(self.get("value", String.class)))
-
-                // ----- Float Literal -----
-                .addDefinition("float")
-                .literal("float", self -> token -> self.put("value", token.getValue()))
-                .endDefinition(self -> () -> new LispAtom.LispNumber(self.get("value", String.class)))
-
-                // ----- Boolean -----
-                .addDefinition("boolean")
-                .literal("boolean", self -> token -> self.put("value", token.getValue()))
-                .endDefinition(self -> () -> new LispAtom.LispBoolean(self.get("value", String.class).equals("#t")))
-
-                // ----- Character Literal -----
-                .addDefinition("character")
-                .literal("character", self -> token -> self.put("value", token.getValue()))
-                .endDefinition(self -> () -> new LispAtom.LispCharacter(self.get("value", String.class).charAt(2)))
-
-
-                // ----- Symbol -----
-                .addDefinition("symbol")
-                .identifier("symbol", self -> token -> self.put("value", token.getValue()))
-                .endDefinition(self -> () -> new LispAtom.LispSymbol(self.get("value", String.class)))
-
-                // ----- Keyword -----
-                .addDefinition("keyword")
-                .identifier("keyword", self -> token -> self.put("value", token.getValue()))
-                .endDefinition(self -> () -> new LispAtom.LispKeyword(self.get("value", String.class).substring(1)))
-
-                // ----- Nil -----
-                .addDefinition("nil")
-                .literal("nil", self -> token ->
-                {
-                })
-                .endDefinition(self -> () -> LispAtom.LispNil.INSTANCE)
-
-
-                .build();
-
-        String lispCode = """
-                ; Test with a simple missing closing parenthesis
-                ((define x 10
+                // Create entry block and builder
+                IRBuilder builder = mainFunction.getEntryBuilder();
+                BasicBlock entryBlock = mainFunction.getEntryBlock();
+                builder.moveToBlock(entryBlock);
                 
-                ; Test with a misplaced closing parenthesis
-                (foo bar) baz)
+                // Step 1: Define Address struct type
+                Type[] addressFields = new Type[] {
+                    // String fields will be char arrays
+                    context.types().arrayOf(context.types().i8(), 100), // street: char[100]
+                    context.types().arrayOf(context.types().i8(), 50),  // city: char[50]
+                    context.types().arrayOf(context.types().i8(), 20),  // zipCode: char[20]
+                };
+                StructType addressType = context.types().struct("Address", addressFields, false);
+                System.out.println("Defined Address struct type");
                 
-                ; Test with balanced parentheses for comparison
-                (alpha (beta) gamma)
-                """;
+                // Step 2: Define Person struct type with a nested Address
+                Type[] personFields = new Type[] {
+                    context.types().arrayOf(context.types().i8(), 50),  // name: char[50]
+                    context.types().i32(),                              // age: int32
+                    addressType,                                        // address: Address
+                    context.types().i1()                                // isEmployed: bool
+                };
+                StructType personType = context.types().struct("Person", personFields, false);
+                System.out.println("Defined Person struct type with nested Address");
+                
+                // Step 3: Allocate a Person instance on the stack
+                Value personVar = builder.allocateStack(personType, "person");
+                System.out.println("Allocated Person instance on stack");
+                
+                // Step 4: Set the person's age to 30
+                Value agePtr = builder.getStructFieldPointer(personVar, 1, "age.ptr");
+                builder.storeValue(context.types().i32().createValue(30), agePtr);
+                System.out.println("Set person's age to 30");
+                
+                // Step 5: Set isEmployed to true
+                Value isEmployedPtr = builder.getStructFieldPointer(personVar, 3, "employed.ptr");
+                builder.storeValue(context.types().i1().createValue(1), isEmployedPtr);
+                System.out.println("Set person's employment status to true");
+                
+                // Step 6: Get a pointer to the nested Address struct
+                Value addressPtr = builder.getStructFieldPointer(personVar, 2, "addr.ptr");
+                
+                // Step 7: Set the zipCode field of the Address
+                // First get a pointer to the zipCode field (3rd field of Address)
+                Value zipCodePtr = builder.getStructFieldPointer(addressPtr, 2, "zip.ptr");
+                
+                // Now we'd need helper functions to set string values properly, but for simplicity,
+                // we'll just demonstrate by setting the first character
+                Value firstCharPtr = builder.getStructFieldPointer(
+                    zipCodePtr, 0, "first.char.ptr");
+                builder.storeValue(context.types().i8().createValue(9), firstCharPtr);
+                
+                // Step 8: Create a function to print Person info
+                // Define a function to "print" a Person struct (in real code, would call printf)
+                Type[] printPersonParams = new Type[] { personType };
+                Function printPersonFunc = context.defineFunction(
+                    "print_person", context.types().i32(), printPersonParams, false);
+                BasicBlock printEntryBlock = printPersonFunc.getEntryBlock();
+                IRBuilder printBuilder = printPersonFunc.getEntryBuilder();
+                printBuilder.moveToBlock(printEntryBlock);
+                
+                // Function parameter (the person struct)
+                Value personParam = new Value(LLVM.LLVMGetParam(printPersonFunc.getRef(), 0));
+                
+                // Get age from person parameter
+                Value paramAgePtr = printBuilder.getStructFieldPointer(
+                    personParam, 1, "param.age.ptr");
+                Value paramAge = printBuilder.loadValue(
+                    context.types().i32(), paramAgePtr, "param.age");
+                
+                // Get isEmployed from person parameter
+                Value paramIsEmployedPtr = printBuilder.getStructFieldPointer(
+                    personParam, 3, "param.employed.ptr");
+                Value paramIsEmployed = printBuilder.loadValue(
+                    context.types().i1(), paramIsEmployedPtr, "param.employed");
+                
+                // In a real function, we would print these values
+                // Here we'll just return the age value
+                printBuilder.returnValue(paramAge);
+                printBuilder.dispose();
+                
+                // Step 9: Create another Person and compare the ages
+                Value personVar2 = builder.allocateStack(personType, "person2");
+                Value age2Ptr = builder.getStructFieldPointer(personVar2, 1, "age2.ptr");
+                builder.storeValue(context.types().i32().createValue(25), age2Ptr);
+                
+                // Load ages for comparison
+                Value age1 = builder.loadValue(context.types().i32(), agePtr, "age1");
+                Value age2 = builder.loadValue(context.types().i32(), age2Ptr, "age2");
+                
+                // Compare ages
+                Value ageComparison = builder.compareGreaterThan(age1, age2, "age.gt");
+                
+                // Create blocks for the comparison result
+                BasicBlock olderBlock = mainFunction.createBlock("older.person");
+                BasicBlock youngerBlock = mainFunction.createBlock("younger.person");
+                BasicBlock exitBlock = mainFunction.createBlock("exit.block");
+                
+                // Branch based on the comparison
+                builder.branchConditional(ageComparison, olderBlock, youngerBlock);
+                
+                // If person1 is older
+                builder.moveToBlock(olderBlock);
+                // In real code, we might call printf to print a message
+                builder.jumpToBlock(exitBlock);
+                
+                // If person2 is older or same age
+                builder.moveToBlock(youngerBlock);
+                // In real code, we might call printf to print a different message
+                builder.jumpToBlock(exitBlock);
+                
+                // Exit block - return a success code
+                builder.moveToBlock(exitBlock);
+                builder.returnValue(context.types().i32().createValue(0));
+                
+                builder.dispose();
 
-        TokenList lispTokens = TokenList.create(lispCode, lispRules, lispPost);
+                // Print and save the generated LLVM IR
+                BytePointer irPointer = LLVM.LLVMPrintModuleToString(moduleRef);
+                String llvmIR = irPointer.getString();
+                System.out.println("\nGenerated LLVM IR:");
+                System.out.println(llvmIR);
 
-        System.out.println("\n=== Tokens ===");
-        System.out.println(lispTokens);
+                // Save the LLVM IR to a file
+                String llFilePath = "output.ll";
+                try (PrintWriter out = new PrintWriter(llFilePath)) {
+                    out.println(llvmIR);
+                    System.out.println("Saved IR to " + Paths.get(llFilePath).toAbsolutePath());
+                } catch (IOException e) {
+                    System.err.println("Error saving LLVM IR to file: " + e.getMessage());
+                }
 
-        ErrorManager errorManager = new ErrorManager();
 
-        errorManager.setContext("lisp", lispCode);
+            } finally {
+                LLVM.LLVMDisposeModule(moduleRef);
+                LLVM.LLVMContextDispose(contextRef);
+            }
 
-        ASTWrapper astWrapper = rules.createAST(lispTokens, errorManager);
+            System.out.println("\nLLVM IR generation completed");
 
-
-        if (errorManager.hasErrors())
-            errorManager.printReports(System.out);
-        else
-        {
-            LispAST ast = LispAST.fromASTWrapper(astWrapper);
-
-            System.out.println("\n=== AST Tree Structure ===");
-            System.out.println(ast.printTree(0));
-
-            System.out.println("\n=== Regenerated Lisp Code ===");
-            System.out.println(ast.generateCode());
-
-            System.out.println("\n=== Original Code ===");
-            System.out.println(lispCode);
-
+        } catch (Throwable e) {
+            System.err.println("Uncaught error: ");
+            e.printStackTrace();
         }
     }
 }

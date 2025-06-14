@@ -1,9 +1,13 @@
 package org.nest.lisp.ast;
 
+import org.nest.tokenization.Coordinates;
+
 import java.util.ArrayList;
 import java.util.List;
 
-
+/**
+ * A LispList is a list of LispNodes.
+ */
 public record LispList(List<LispNode> elements) implements LispNode
 {
     public LispList
@@ -13,11 +17,5 @@ public record LispList(List<LispNode> elements) implements LispNode
         {
             elements = new ArrayList<>();
         }
-    }
-
-    // Convenience constructor for empty list
-    public LispList()
-    {
-        this(new ArrayList<>());
     }
 }

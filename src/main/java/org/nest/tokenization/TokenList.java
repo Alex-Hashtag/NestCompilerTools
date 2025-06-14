@@ -7,26 +7,22 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 
-/**
- * Represents a list of tokens generated from an input string, given a set of TokenRules
- * and a TokenPostProcessor. Provides iteration, look-ahead, invalid-token retrieval, and
- * a formatted table output of all tokens.
- */
+/// Represents a list of tokens generated from an input string, given a set of TokenRules
+/// and a TokenPostProcessor. Provides iteration, look-ahead, invalid-token retrieval, and
+/// a formatted table output of all tokens.
 public final class TokenList implements Iterable<Token>
 {
-    private final List<Token> tokens;
+    final List<Token> tokens;
 
-    private TokenList(List<Token> tokens)
+    TokenList(List<Token> tokens)
     {
         this.tokens = Collections.unmodifiableList(tokens);
     }
 
-    /**
-     * Factory method:
-     * 1) Tokenizes the input using the given rules.
-     * 2) Applies the post-processor to each token.
-     * 3) Returns a new TokenList.
-     */
+    /// Factory method:
+    /// 1) Tokenizes the input using the given rules.
+    /// 2) Applies the post-processor to each token.
+    /// 3) Returns a new TokenList.
     public static TokenList create(String input, TokenRules rules, TokenPostProcessor postProcessor)
     {
         List<Token> rawTokens = tokenize(input, rules);
@@ -54,9 +50,7 @@ public final class TokenList implements Iterable<Token>
 
         // Possibly add a Start token
         if (hasStart)
-        {
             result.add(new Token.Start(new Coordinates(0, 0)));
-        }
 
         // Tokenize line by line
         String[] lines = input.split("\n", -1); // -1 to keep empty lines
@@ -71,9 +65,7 @@ public final class TokenList implements Iterable<Token>
         {
             // If not the very first line, and whitespaceMode != IGNORE => produce NewLine token
             if (li > 0 && rules.whitespaceMode != WhitespaceMode.IGNORE)
-            {
                 result.add(new Token.NewLine(new Coordinates(line - 1, 9999)));
-            }
 
             String currentLine = lines[li];
             if (currentLine.isEmpty())
@@ -91,16 +83,14 @@ public final class TokenList implements Iterable<Token>
             }
 
             // Tokenize the remainder of the line after indentation
+            // No indentation logic
             if (rules.whitespaceMode == WhitespaceMode.INDENTATION)
             {
                 int leadingCount = 0;
                 while (leadingCount < currentLine.length()
                         && (currentLine.charAt(leadingCount) == ' ' || currentLine.charAt(leadingCount) == '\t'))
-                {
                     leadingCount++;
-                }
                 if (leadingCount < currentLine.length())
-                {
                     tokenizeLineSegment(
                             currentLine.substring(leadingCount),
                             line,
@@ -110,11 +100,8 @@ public final class TokenList implements Iterable<Token>
                             rules.whitespaceMode,
                             t -> result.add(t)
                     );
-                }
             }
             else
-            {
-                // No indentation logic
                 tokenizeLineSegment(
                         currentLine,
                         line,
@@ -124,7 +111,6 @@ public final class TokenList implements Iterable<Token>
                         rules.whitespaceMode,
                         t -> result.add(t)
                 );
-            }
 
             line++;
         }
@@ -141,9 +127,7 @@ public final class TokenList implements Iterable<Token>
 
         // Possibly add an End token
         if (hasEnd)
-        {
             result.add(new Token.End(new Coordinates(line, 1)));
-        }
 
         return result;
     }
@@ -155,7 +139,6 @@ public final class TokenList implements Iterable<Token>
     {
         List<InternalProto> list = new ArrayList<>();
         for (TokenPrototype proto : rules.tokenPrototypes)
-        {
             switch (proto)
             {
                 case TokenPrototype.Keyword kw -> list.add(InternalProto.keyword(kw.value(), rules.caseSensitive));
@@ -177,12 +160,9 @@ public final class TokenList implements Iterable<Token>
                     // Handled externally
                 }
             }
-        }
 
         if (rules.longestMatchFirst)
-        {
             list.sort(TokenList::compareInternalProto);
-        }
         return list;
     }
 
@@ -203,13 +183,9 @@ public final class TokenList implements Iterable<Token>
             {
                 // prefer DELIMITER over OPERATOR
                 if (a.type == InternalProtoType.DELIMITER && b.type == InternalProtoType.OPERATOR)
-                {
                     return -1;
-                }
                 if (b.type == InternalProtoType.DELIMITER && a.type == InternalProtoType.OPERATOR)
-                {
                     return 1;
-                }
             }
             // fallback
             return a.type.ordinal() - b.type.ordinal();
@@ -256,22 +232,14 @@ public final class TokenList implements Iterable<Token>
             {
                 MatchResult mr = proto.match(lineContent, index, line, col, caseSensitive);
                 if (mr != null && mr.length > best.length)
-                {
                     best = new BestMatch(mr.length, mr.token, proto.type);
-                }
                 else if (mr != null && mr.length == best.length)
-                {
                     // Tie-break: prefer delimiter over operator if same text
                     if (proto.type == InternalProtoType.DELIMITER && best.type == InternalProtoType.OPERATOR)
-                    {
                         if (mr.token instanceof Token.Delimiter delT
                                 && best.token instanceof Token.Operator opT
                                 && delT.value().equals(opT.value()))
-                        {
                             best = new BestMatch(mr.length, mr.token, proto.type);
-                        }
-                    }
-                }
             }
 
             if (best.token != null)
@@ -298,9 +266,7 @@ public final class TokenList implements Iterable<Token>
     {
         List<Token> output = new ArrayList<>(rawTokens.size());
         for (Token t : rawTokens)
-        {
             output.add(applyPostProcessing(t, postProcessor));
-        }
         return output;
     }
 
@@ -322,12 +288,9 @@ public final class TokenList implements Iterable<Token>
         };
 
         if (typeKey != null)
-        {
             for (Function<Token, Token> func : postProcessor.getProcessors(typeKey))
-            {
                 t = func.apply(t);
-            }
-        }
+
         return t;
     }
 
@@ -340,9 +303,7 @@ public final class TokenList implements Iterable<Token>
         int indentWidth = 0;
         while (indentWidth < lineContent.length()
                 && (lineContent.charAt(indentWidth) == ' ' || lineContent.charAt(indentWidth) == '\t'))
-        {
             indentWidth++;
-        }
         int currentIndent = indentStack.peek();
 
         if (indentWidth > currentIndent)
@@ -358,14 +319,10 @@ public final class TokenList implements Iterable<Token>
                 outTokens.add(new Token.IndentDecr(new Coordinates(lineNumber, 1)));
             }
             if (!indentStack.isEmpty() && indentStack.peek() != indentWidth)
-            {
                 outTokens.add(new Token.Invalid(new Coordinates(lineNumber, 1),
                         "Inconsistent indentation level " + indentWidth));
-            }
             if (indentStack.isEmpty())
-            {
                 indentStack.push(0);
-            }
         }
     }
 
@@ -393,15 +350,11 @@ public final class TokenList implements Iterable<Token>
         {
             char usedChar = (foundSpace ? ' ' : '\t');
             if (currentIndentChar == null)
-            {
                 currentIndentChar = usedChar; // first use sets the indentation char
-            }
             else if (!currentIndentChar.equals(usedChar))
-            {
                 outTokens.add(new Token.Invalid(new Coordinates(lineNumber, 1),
                         "Inconsistent indentation character (expected "
                                 + (currentIndentChar == ' ' ? "spaces" : "tabs") + ")"));
-            }
         }
         return currentIndentChar;
     }
@@ -424,7 +377,7 @@ public final class TokenList implements Iterable<Token>
     @Override
     public Iterator<Token> iterator()
     {
-        return new LookAheadIterator();
+        return new LookAheadIterator(this);
     }
 
     /**
@@ -434,12 +387,9 @@ public final class TokenList implements Iterable<Token>
     {
         List<Token.Invalid> invalids = new ArrayList<>();
         for (Token t : tokens)
-        {
             if (t instanceof Token.Invalid inv)
-            {
                 invalids.add(inv);
-            }
-        }
+
         return invalids;
     }
 
@@ -480,9 +430,7 @@ public final class TokenList implements Iterable<Token>
         sb.append(String.format(fmt, headers[0], headers[1], headers[2], headers[3]));
         sb.append(buildSeparator(widths));
         for (String[] row : rows)
-        {
             sb.append(String.format(fmt, row[0], row[1], row[2], row[3]));
-        }
 
         return sb.toString();
     }
@@ -627,9 +575,7 @@ public final class TokenList implements Iterable<Token>
             if (index + len > input.length()) return null;
             String chunk = input.substring(index, index + len);
             if (!caseSensitive)
-            {
                 chunk = chunk.toLowerCase(Locale.ROOT);
-            }
             if (!chunk.equals(kw)) return null;
 
             // If purely alphabetical, ensure boundary
@@ -637,9 +583,7 @@ public final class TokenList implements Iterable<Token>
             {
                 char next = input.charAt(index + len);
                 if (isIdentifierChar(next))
-                {
                     return null; // e.g. "and" vs "andres"
-                }
             }
 
             return new MatchResult(len,
@@ -937,22 +881,16 @@ public final class TokenList implements Iterable<Token>
 
             // Check mixing
             if (foundSpace && foundTab)
-            {
                 pending.add(new Token.Invalid(new Coordinates(lineNum, 1),
                         "Mixed tabs/spaces in indentation"));
-            }
             else if (foundSpace || foundTab)
             {
                 char usedChar = foundSpace ? ' ' : '\t';
                 if (indentationChar == null)
-                {
                     indentationChar = usedChar;
-                }
                 else if (!indentationChar.equals(usedChar))
-                {
                     pending.add(new Token.Invalid(new Coordinates(lineNum, 1),
                             "Inconsistent indentation character"));
-                }
             }
 
             int currentIndent = indentStack.peek();
@@ -969,46 +907,12 @@ public final class TokenList implements Iterable<Token>
                     pending.add(new Token.IndentDecr(new Coordinates(lineNum, 1)));
                 }
                 if (!indentStack.isEmpty() && indentStack.peek() != indentWidth)
-                {
                     pending.add(new Token.Invalid(new Coordinates(lineNum, 1),
                             "Inconsistent indentation level " + indentWidth));
-                }
                 if (indentStack.isEmpty())
-                {
                     indentStack.push(0);
-                }
             }
         }
     }
 
-    /**
-     * Special iterator that supports lookAhead without consuming tokens.
-     */
-    public class LookAheadIterator implements Iterator<Token>
-    {
-        private int currentIndex = 0;
-
-        @Override
-        public boolean hasNext()
-        {
-            return currentIndex < tokens.size();
-        }
-
-        @Override
-        public Token next()
-        {
-            if (!hasNext()) throw new NoSuchElementException();
-            return tokens.get(currentIndex++);
-        }
-
-        public Token lookAhead(int steps)
-        {
-            int idx = currentIndex + steps;
-            if (idx < 0 || idx >= tokens.size())
-            {
-                return null;
-            }
-            return tokens.get(idx);
-        }
-    }
 }

@@ -11,6 +11,7 @@ public class Definition
     public final String name;
     public final List<Step> steps = new ArrayList<>();
     public ASTNodeSupplier builder;
+    public String hint; // Custom hint to display on parse failure
 
     public Definition(String name)
     {

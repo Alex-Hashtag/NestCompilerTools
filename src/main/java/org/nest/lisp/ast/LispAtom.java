@@ -1,6 +1,7 @@
 package org.nest.lisp.ast;
 
-public sealed interface LispAtom extends LispNode permits LispAtom.LispSymbol, LispAtom.LispNumber, LispAtom.LispString, LispAtom.LispBoolean, LispAtom.LispNil, LispAtom.LispCharacter, LispAtom.LispKeyword
+
+public sealed interface LispAtom extends LispNode permits LispAtom.LispBoolean, LispAtom.LispCharacter, LispAtom.LispKeyword, LispAtom.LispNil, LispAtom.LispNumber, LispAtom.LispString, LispAtom.LispSymbol
 {
     record LispSymbol(String name) implements LispAtom
     {
@@ -16,6 +17,8 @@ public sealed interface LispAtom extends LispNode permits LispAtom.LispSymbol, L
 
     record LispBoolean(boolean value) implements LispAtom
     {
+        public static final LispBoolean TRUE = new LispBoolean(true);
+        public static final LispBoolean FALSE = new LispBoolean(false);
     }
 
     record LispCharacter(char value) implements LispAtom
