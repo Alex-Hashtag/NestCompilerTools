@@ -19,10 +19,30 @@ public class IRBuilder {
         LLVMPositionBuilderAtEnd(builder, block.getRef());
     }
 
+    public void moveToNextBlock() {
+        LLVMPositionBuilderAtEnd(builder, LLVMGetInsertBlock(builder));
+    }
     /*──────── Constants ─────────*/
     public Value constantInt(Type type, long value) {
         return new Value(LLVMConstInt(type.getRef(), value, 0));
     }
+
+    public Value constantFloat(Type type, double value) {
+        return new Value(LLVMConstReal(type.getRef(), value));
+    }
+
+    public Value constantNull(Type type) {
+        return new Value(LLVMConstNull(type.getRef()));
+    }
+
+    public Value constantBool(Type type, boolean value) {
+        return new Value(LLVMConstInt(type.getRef(), value ? 1 : 0, 0));
+    }
+
+    public Value constantString(Type type, String value) {
+        return new Value(LLVMConstStringInContext(LLVMGetGlobalContext(), value, value.length(), 0));
+    }
+
 
     /*──────── Memory ops ────────*/
     public Value allocateStack(Type type, String name) {
@@ -35,6 +55,8 @@ public class IRBuilder {
     public Value storeValue(Value value, Value ptr) {
         return new Value(LLVMBuildStore(builder, value.getRef(), ptr.getRef()));
     }
+
+
 
     /*──────── Arithmetic ────────*/
     public Value addValues(Value lhs, Value rhs, String name) {

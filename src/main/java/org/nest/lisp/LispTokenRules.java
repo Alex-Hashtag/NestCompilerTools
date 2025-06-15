@@ -15,8 +15,8 @@ public class LispTokenRules
     {
         return TokenRules.builder()
                 // Lisp uses parentheses as structure
-                .delimeter("(")
-                .delimeter(")")
+                .delimiter("(")
+                .delimiter(")")
 
                 // Quote characters
                 .operator("'")   // Quote

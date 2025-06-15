@@ -2,6 +2,7 @@ package org.nest.lisp;
 
 import org.nest.errors.ErrorManager;
 import org.nest.lisp.ast.LispAST;
+import org.nest.lisp.parser.LispParser;
 import org.nest.tokenization.TokenList;
 
 

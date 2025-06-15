@@ -19,8 +19,8 @@ public class LispASTRules {
     public static ASTRules create() {
 
         return ASTRules.builder()
-                .topRule(List.of("expr")) // Top Rule defines the types of elements that can be at the top layer of the AST.
                 .ignoreComments(true) // Enable comment skipping to avoid errors with comments
+                .topRule(List.of("expr")) // Top Rule defines the types of elements that can be at the top layer of the AST.
                 .startRule("expr") // ASTRuleTemplate — top-level expression
 
                 // ----- List Form -----

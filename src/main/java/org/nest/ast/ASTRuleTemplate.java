@@ -18,9 +18,9 @@ public class ASTRuleTemplate
     List<Rule> rules = new ArrayList<>();
     Rule currentRuleBeingBuilt;
 
-    ASTRuleTemplate(String name, List<String> topRules, boolean ignoreComments)
+    ASTRuleTemplate(List<String> topRules, boolean ignoreComments)
     {
-        currentRuleBeingBuilt = new Rule(name);
+        currentRuleBeingBuilt = null;
         this.topRules = topRules;
         this.ignoreComments = ignoreComments;
     }
@@ -46,5 +46,11 @@ public class ASTRuleTemplate
     {
         rules.add(currentRuleBeingBuilt);
         return new ASTRules(topRules, rules, ignoreComments);
+    }
+
+    public ASTRuleTemplate addRule(Rule rule) // ✅ allows defining next rule
+    {
+        rules.add(rule);
+        return this;
     }
 }

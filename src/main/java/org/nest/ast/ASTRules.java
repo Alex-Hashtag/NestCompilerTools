@@ -45,6 +45,7 @@ public class ASTRules
         return new ASTRulesBuilder();
     }
 
+
     /// Builds a tree structure for each rule to optimize rule matching.
     /// This pre-processes the rules once at initialization time to avoid
     /// repeatedly examining the same definitions during parsing.

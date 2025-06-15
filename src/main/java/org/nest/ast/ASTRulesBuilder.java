@@ -35,10 +35,10 @@ public class ASTRulesBuilder
     ///
     /// @param ruleNames the names of the rules that can appear at the top level.
     /// @return this builder
-    public ASTRulesBuilder topRule(List<String> ruleNames)
+    public ASTRuleTemplate topRule(List<String> ruleNames)
     {
         this.topRules = ruleNames;
-        return this;
+        return new ASTRuleTemplate(this.topRules, this.ignoreComments);
     }
 
     /// Sets whether comments should be ignored during parsing.
@@ -50,14 +50,5 @@ public class ASTRulesBuilder
     {
         this.ignoreComments = ignore;
         return this;
-    }
-
-    /// Declares a rule that can appear at the top level of the AST.
-    ///
-    /// @param name the name of the rule.
-    /// @return a template that can be used to build the actual rule and any following rules
-    public ASTRuleTemplate startRule(String name)
-    {
-        return new ASTRuleTemplate(name, this.topRules, this.ignoreComments);
     }
 }
