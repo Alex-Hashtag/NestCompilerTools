@@ -56,7 +56,7 @@ public final class TokenPostProcessor
             return this;
         }
 
-        public TokenPostProcessorBuilder delimeter(String type, Function<Token.Delimiter, Token.Delimiter> processor)
+        public TokenPostProcessorBuilder delimiter(String type, Function<Token.Delimiter, Token.Delimiter> processor)
         {
             addProcessor(type, token -> processor.apply((Token.Delimiter) token));
             return this;

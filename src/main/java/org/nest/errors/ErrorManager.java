@@ -193,11 +193,45 @@ public final class ErrorManager
     private void printCodeContext(PrintStream out, CompilerError error, String highlightColor)
     {
         int errorLine = error.getLine();
-
+        String token = error.getToken();
+        boolean isEOF = "<eof>".equals(token) || "End".equals(token);
+        
         // Check if we have valid source lines
-        if (errorLine <= 0 || errorLine > sourceLines.size())
-        {
+        if (errorLine <= 0 || sourceLines.isEmpty()) {
             return;
+        }
+        
+        // If error is beyond source lines (EOF case), adjust to show last non-empty line
+        if (errorLine > sourceLines.size())
+        {
+            if (isEOF) {
+                // Show the last non-empty line with EOF indicator
+                errorLine = sourceLines.size();
+            } else {
+                return;
+            }
+        }
+        
+        // For EOF errors, adjust to show the last meaningful line
+        if (isEOF) {
+            // If error line is beyond source, use the last line
+            if (errorLine > sourceLines.size()) {
+                errorLine = sourceLines.size();
+            }
+            
+            // If on an empty line, find the last non-empty line
+            if (errorLine <= sourceLines.size() && errorLine > 0) {
+                String currentLine = sourceLines.get(errorLine - 1);
+                if (currentLine.trim().isEmpty()) {
+                    // Find the last non-empty line before this
+                    for (int i = errorLine - 1; i >= 1; i--) {
+                        if (!sourceLines.get(i - 1).trim().isEmpty()) {
+                            errorLine = i;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         // Calculate line number width for padding
@@ -218,12 +252,23 @@ public final class ErrorManager
         }
 
         // Print the error line
+        // For EOF errors, highlight at the end of the line or show empty line
+        int tokenLength = isEOF ? 0 : error.getToken().length();
+        int column = error.getColumn();
+        
+        // If EOF and we're showing the last line, position at end of line
+        if (isEOF && errorLine <= sourceLines.size()) {
+            String lastLine = sourceLines.get(errorLine - 1);
+            column = lastLine.length() + 1; // Position after last character
+            tokenLength = 1; // Show a single caret
+        }
+        
         printCodeLine(out, errorLine, lineNumFormat, ANSI.BLUE + ANSI.BOLD, highlightColor,
-                error.getColumn(), error.getToken().length());
+                column, tokenLength);
 
         // Print underline with more informative pointer
-        int underlineStart = error.getColumn() - 1;
-        int underlineLength = Math.max(1, error.getToken().length());
+        int underlineStart = column - 1;
+        int underlineLength = Math.max(1, tokenLength);
 
         out.print(ANSI.BLUE + emptyLineNum + " |" + ANSI.RESET + " ");
         out.print(" ".repeat(Math.max(0, underlineStart)));
@@ -239,7 +284,8 @@ public final class ErrorManager
         }
         
         // Add inline error note for better context
-        out.println(" " + getShortErrorDescription(error) + ANSI.RESET);
+        String shortDesc = isEOF ? "unexpected end of file" : getShortErrorDescription(error);
+        out.println(" " + shortDesc + ANSI.RESET);
 
         // Print context lines after error
         int contextEnd = Math.min(sourceLines.size(), errorLine + contextLines);

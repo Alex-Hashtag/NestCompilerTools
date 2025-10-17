@@ -41,8 +41,8 @@ NestCompilerTools provides a highly configurable framework for building custom l
 // Define token rules for Lisp
 TokenRules lispRules = TokenRules.builder()
     // Lisp uses parentheses as structure
-    .delimeter("(")
-    .delimeter(")")
+    .delimiter("(")
+    .delimiter(")")
 
     // Quote characters
     .operator("'")   // Quote

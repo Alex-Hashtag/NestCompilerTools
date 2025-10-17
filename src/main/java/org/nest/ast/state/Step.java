@@ -5,6 +5,7 @@ import org.nest.ast.functional.ASTNodeConsumer;
 import org.nest.ast.functional.TokenAction;
 
 import java.util.List;
+import java.util.Set;
 
 
 public sealed interface Step permits Step.Keyword, Step.Literal, Step.Identifier, Step.Operator,
@@ -43,7 +44,7 @@ public sealed interface Step permits Step.Keyword, Step.Literal, Step.Identifier
     {
     }
     
-    record Choice(List<List<Step>> alternatives) implements Step
+    record Choice(Set<List<Step>> alternatives) implements Step
     {
     }
 }

@@ -37,14 +37,16 @@ public class ASTRuleTemplate
 
     public ASTRuleTemplate startRule(String name) // ✅ allows defining next rule
     {
-        rules.add(currentRuleBeingBuilt);
+        if (currentRuleBeingBuilt != null)
+            rules.add(currentRuleBeingBuilt);
         currentRuleBeingBuilt = new Rule(name);
         return this;
     }
 
     public ASTRules build() // finishes the rule chain
     {
-        rules.add(currentRuleBeingBuilt);
+        if (currentRuleBeingBuilt != null)
+            rules.add(currentRuleBeingBuilt);
         return new ASTRules(topRules, rules, ignoreComments);
     }
 

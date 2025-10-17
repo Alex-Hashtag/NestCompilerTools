@@ -1,5 +1,6 @@
 package org.nest.ast;
 
+import org.nest.ast.ASTBuildContext;
 import org.nest.ast.functional.ASTAction;
 import org.nest.ast.functional.TokenAction;
 import org.nest.ast.state.Definition;
@@ -18,26 +19,25 @@ import java.util.function.Supplier;
 
 public class ASTRules
 {
+
+
     // Maximum token preview length for error messages
     private static final int MAX_TOKEN_PREVIEW_LENGTH = 15;
-    // Cache of rule trees for faster matching
-    private final Map<String, RuleTree> ruleTrees = new HashMap<>();
-    // Track the current parsing path for better error reporting
-    private final Deque<String> parsingPathStack = new ArrayDeque<>();
-    List<String> topRules;
-    List<Rule> rules;
-    boolean ignoreComments;
-    TokenList tokenList;
 
-    public ASTRules(List<String> topRules, List<Rule> rules, boolean ignoreComments)
-    {
-        this.topRules = topRules;
-        this.rules = rules;
+    private final List<String> topRuleNames;
+    private final Map<String, Rule> ruleTable;
+    private final boolean ignoreComments;
+
+    // The current compilation artefacts
+    private TokenList tokenList;
+    private TokenCursor cursor;
+    private ErrorManager errorManager;
+
+    public ASTRules(List<String> topRuleNames, Collection<Rule> rules, boolean ignoreComments) {
+        this.topRuleNames = Objects.requireNonNull(topRuleNames);
+        this.ruleTable   = new HashMap<>();
+        rules.forEach(r -> { if (r != null) this.ruleTable.put(r.getName(), r); });
         this.ignoreComments = ignoreComments;
-        this.tokenList = null;
-
-        // Build rule trees for all rules
-        buildRuleTrees();
     }
 
     public static ASTRulesBuilder builder()
@@ -46,1325 +46,805 @@ public class ASTRules
     }
 
 
-    /// Builds a tree structure for each rule to optimize rule matching.
-    /// This pre-processes the rules once at initialization time to avoid
-    /// repeatedly examining the same definitions during parsing.
-    private void buildRuleTrees()
-    {
-        // Create a map for fast rule lookup
-        Map<String, Rule> ruleMap = new HashMap<>();
-        for (Rule rule : rules)
-            ruleMap.put(rule.getName(), rule);
-
-        // Build a tree for each rule
-        for (Rule rule : rules)
+    /// Represents the result of parsing: either a Success or a Failure.
+    /// - `Success` indicates the step matched and tokens were consumed.
+    /// - `Failure` indicates the step did not match, but progress may still be reported (e.g., for error recovery).
+    sealed interface ParseResponse permits Success, Failure {
+        default boolean isBetterThan(ParseResponse other)
         {
-            RuleTree tree = new RuleTree(rule);
-            ruleTrees.put(rule.getName(), tree);
-        }
-    }
-
-    // TODO: Create List<Object> extractAll(String ruleName) and List<Object> extractAll(String ruleName, String definitionName)
-    //  methods that will take a rule name and optional definition name and return a list of all extracted nodes. It will also delete the nodes
-    //  Ex: extract all import statements before parsing to be used in the context of the parsing
-    //  Must also add extractAllCopy that can be used without deleting from the TokenList
-    //  Should consider adding a method which can extract and Copy based on a custom pattern
-
-
-    /// Creates an Abstract Syntax Tree (AST) from a token list.
-    ///
-    /// @param tokens the token list to parse
-    /// @param errors the error manager to report errors to
-    /// @return the root of the AST
-    public ASTWrapper createAST(TokenList tokens, ErrorManager errors)
-    {
-        // 1. Wrap the TokenList in a lookahead-capable cursor
-        TokenCursor cursor = new TokenCursor(tokens, ignoreComments);
-
-        // 2. Build a Map<String, Rule> from your List<Rule> for fast lookup
-        Map<String, Rule> ruleMap = new HashMap<>();
-        for (Rule rule : rules)
-            ruleMap.put(rule.getName(), rule);
-
-        // 3. Initialize the root node collection
-        List<Object> rootNodes = new ArrayList<>();
-
-        // 4. Process tokens until the end of the stream
-        while (!cursor.isAtEnd())
-        {
-            boolean matchedAnyRule = false;
-
-            // Collect all error information across all top rules
-            List<String> allExpectedTokens = new ArrayList<>();
-            Map<String, List<String>> ruleToExpectedTokens = new HashMap<>();
-            int bestTokensConsumed = 0;
-            MatchResult bestErrorMatch = null;
-
-            // Clear the parsing path stack at the beginning of each top-level rule attempt
-            parsingPathStack.clear();
-
-            // Try to match any of the top-level rules
-            for (String topRuleName : topRules)
-            {
-                Rule rule = ruleMap.get(topRuleName);
-
-                if (rule == null)
-                {
-                    errors.error("Undefined top rule: " + topRuleName, 0, 0, "",
-                            "Check the grammar definition to ensure this rule is properly defined.");
-                    continue;
-                }
-
-                // Push the current rule onto the parsing path stack
-                parsingPathStack.push(topRuleName);
-
-                // Save the current position for backtracking
-                int savePos = cursor.savePosition();
-
-                // Try to match this rule using the optimized rule tree
-                RuleTree ruleTree = ruleTrees.get(topRuleName);
-                MatchResult result = ruleTree != null
-                        ? matchRuleUsingTree(cursor, ruleTree, ruleMap, errors)
-                        : matchRule(cursor, rule, ruleMap, errors);
-
-                if (result != null && result.matched)
-                {
-                    // Successfully matched this rule, process the AST
-                    if (result.definition != null && result.definition.builder != null)
-                    {
-                        // Create context for the builder
-                        ASTBuildContext builderContext = new ASTBuildContext();
-
-                        // Build an empty context to be populated while creating the AST
-                        for (Map.Entry<String, Object> entry : result.localData.entrySet())
-                            builderContext.put(entry.getKey(), entry.getValue());
-
-                        // Add the node to the list
-                        Supplier<Object> nodeBuilder = result.definition.builder.apply(builderContext);
-                        Object node = nodeBuilder.get();
-                        if (node != null)
-                            rootNodes.add(node);
-
-                        // No need to commit position again, it was already committed in matchRule
-
-                        // We've successfully matched and processed a rule, break out of the rule loop
-                        matchedAnyRule = true;
-                        parsingPathStack.pop(); // Pop the current rule from the stack
-                        break;
-                    }
-                    else // Reset to the start position if this rule didn't match
-                        cursor.backtrack();
-                }
-                else if (result != null && !result.matched)
-                {
-                    // This rule didn't match, but collect error information
-                    if (result.expectedTokens != null && !result.expectedTokens.isEmpty())
-                    {
-                        allExpectedTokens.addAll(result.expectedTokens);
-                        ruleToExpectedTokens.put(topRuleName, new ArrayList<>(result.expectedTokens));
-                    }
-
-                    // Track the best partial match
-                    int tokensConsumed = result.consumedTokens != null ? result.consumedTokens.size() : 0;
-                    if (tokensConsumed > bestTokensConsumed || 
-                        (tokensConsumed == bestTokensConsumed && result.definition != null && result.definition.hint != null))
-                    {
-                        bestTokensConsumed = tokensConsumed;
-                        bestErrorMatch = result;
-                    }
-
-                    // Reset position
-                    cursor.backtrack();
-                }
-                else // Reset position
-                    cursor.backtrack();
-
-                // Pop the current rule from the stack
-                parsingPathStack.pop();
-            }
-
-            // If none of the top-level rules matched, report an error and skip this token
-            if (!matchedAnyRule)
-            {
-                Token currentToken = cursor.peek();
-                String tokenValue = currentToken != null ? currentToken.getValue() : "END_OF_FILE";
-                String tokenType = getTokenTypeName(currentToken);
-
-                int line = 0;
-                int column = 0;
-
-                // Check if we have a better position from a partial match
-                if (bestTokensConsumed > 0 && bestErrorMatch != null &&
-                        bestErrorMatch.consumedTokens != null && !bestErrorMatch.consumedTokens.isEmpty())
-                {
-                    // Use the position of the last consumed token plus the current token
-                    Token lastToken = bestErrorMatch.consumedTokens.get(bestErrorMatch.consumedTokens.size() - 1);
-                    if (lastToken != null && lastToken.position() != null)
-                    {
-                        line = lastToken.position().line();
-                        column = lastToken.position().column();
-                        // Use the current token value but point to where the error actually occurred
-                        tokenValue = lastToken.getValue();
-                    }
-                }
-                else if (currentToken != null && currentToken.position() != null)
-                {
-                    // Fallback to current token if no better position is available
-                    line = currentToken.position().line();
-                    column = currentToken.position().column();
-                }
-
-                // Collect error information from the best error match
-                String customHint = null;
-                if (bestErrorMatch != null && bestErrorMatch.definition != null && bestErrorMatch.definition.hint != null)
-                    customHint = bestErrorMatch.definition.hint;
-
-                String message = buildDetailedErrorMessage(tokenValue, tokenType, allExpectedTokens, ruleToExpectedTokens);
-                String hint = generateHint(currentToken, allExpectedTokens, bestTokensConsumed, customHint);
-
-                errors.error(
-                        message,
-                        line, column, tokenValue, hint);
-
-                // Skip this token and continue
-                cursor.consume();
-
-                // Commit this position
-                cursor.commitPosition();
-            }
-        }
-
-        // Create the root ASTWrapper (e.g., named "Program") to collect top-level nodes
-        ASTWrapper root = new ASTWrapper(rootNodes);
-
-        return root;
-    }
-
-    /// Builds a detailed error message with context about what was expected
-    private String buildDetailedErrorMessage(String tokenValue, String tokenType,
-                                             List<String> allExpectedTokens,
-                                             Map<String, List<String>> ruleToExpectedTokens)
-    {
-        StringBuilder message = new StringBuilder();
-
-        // Special case for end of file errors
-        if (tokenType.equals("end of file"))
-        {
-            message.append("Unexpected end of file");
-            if (!allExpectedTokens.isEmpty())
-            {
-                message.append(". Expected ");
-                if (allExpectedTokens.size() == 1)
-                    message.append(allExpectedTokens.get(0));
-                else
-                {
-                    message.append("one of: ");
-                    message.append(String.join(", ", new ArrayList<>(new LinkedHashSet<>(allExpectedTokens))));
-                }
-            }
-        }
-        // Special case for delimiters that match what's expected (usually nested delimiters)
-        else if (tokenType.equals("delimiter") &&
-                allExpectedTokens.stream().anyMatch(e -> e.contains("delimiter") && e.contains("'" + tokenValue + "'")))
-        {
-            // This is the case when we find a closing delimiter but it's for a different level
-            // For example, finding a closing parenthesis for an inner expression when we needed one for an outer expression
-            message.append("Missing closing delimiter. Found ").append(tokenType).append(": '")
-                    .append(truncateTokenForDisplay(tokenValue)).append("'");
-
-            // Since this is likely a nested delimiter issue, make it clearer
-            message.append(" which closes an inner expression, but outer expression is not closed");
-        }
-        // Default case
-        else
-        {
-            // Start with the basic unexpected token message
-            message.append("Unexpected ").append(tokenType).append(": '")
-                    .append(truncateTokenForDisplay(tokenValue)).append("'");
-
-            // Add expected tokens if available
-            if (!allExpectedTokens.isEmpty())
-            {
-                // Sort and deduplicate expected tokens for better readability
-                List<String> uniqueExpected = new ArrayList<>(new LinkedHashSet<>(allExpectedTokens));
-
-                message.append(". Expected ");
-                if (uniqueExpected.size() == 1)
-                    message.append(uniqueExpected.get(0));
-                else
-                {
-                    message.append("one of: ");
-                    message.append(String.join(", ", uniqueExpected));
-                }
-            }
-        }
-
-        // Add rule-specific expectations for more context
-        if (ruleToExpectedTokens.size() > 0 && ruleToExpectedTokens.size() <= 3)
-        {
-            message.append("\n\nIn context of rules:");
-            for (Map.Entry<String, List<String>> entry : ruleToExpectedTokens.entrySet())
-                if (!entry.getValue().isEmpty())
-                    message.append("\n  • ").append(entry.getKey()).append(": expected ")
-                            .append(String.join(", ", entry.getValue()));
-        }
-
-        return message.toString();
-    }
-
-    /// Generates a helpful hint based on the error context
-    private String generateHint(Token token, List<String> expectedTokens, int bestTokensConsumed)
-    {
-        return generateHint(token, expectedTokens, bestTokensConsumed, null);
-    }
-    
-    /// Generates a helpful hint based on the error context, with optional custom hint
-    private String generateHint(Token token, List<String> expectedTokens, int bestTokensConsumed, String customHint)
-    {
-        // If there's a custom hint provided, use it instead of the generated hint
-        if (customHint != null && !customHint.isEmpty())
-            return customHint;
-            
-        if (token == null || token instanceof Token.End)
-            return "Unexpected end of file. The syntax may be incomplete.";
-
-        // If we have some context about what was partially matched
-        if (bestTokensConsumed > 0)
-        {
-            // For delimiter errors, give more specific guidance
-            if (expectedTokens.stream().noneMatch(s -> s.contains("delimiter")))
-                return "A partial match was found. Check for a syntax error near this token.";
-            if (expectedTokens.stream().anyMatch(s -> s.contains("')'")))
-                return "Missing closing parenthesis ')'. Check that all opening parentheses have matching closing ones.";
-            if (expectedTokens.stream().anyMatch(s -> s.contains("'}'")))
-                return "Missing closing brace '}'. Check that all opening braces have matching closing ones.";
-            if (expectedTokens.stream().anyMatch(s -> s.contains("']'")))
-                return "Missing closing bracket ']'. Check that all opening brackets have matching closing ones.";
-            return "Missing closing delimiter. Check for unbalanced delimiters in your code.";
-
-        }
-
-        // If we expected a delimiter
-        if (expectedTokens.stream().anyMatch(s -> s.contains("delimiter")))
-        {
-            if (expectedTokens.stream().anyMatch(s -> s.contains("'('")))
-                return "Opening parenthesis '(' may be missing.";
-            if (expectedTokens.stream().anyMatch(s -> s.contains("')'")))
-                return "Closing parenthesis ')' may be missing.";
-            if (expectedTokens.stream().anyMatch(s -> s.contains("'{'")))
-                return "Opening brace '{' may be missing.";
-            if (expectedTokens.stream().anyMatch(s -> s.contains("'}'")))
-                return "Closing brace '}' may be missing.";
-            if (expectedTokens.stream().anyMatch(s -> s.contains("'['")))
-                return "Opening bracket '[' may be missing.";
-            if (expectedTokens.stream().anyMatch(s -> s.contains("']'")))
-                return "Closing bracket ']' may be missing.";
-            return "Check for missing delimiters or punctuation.";
-        }
-
-        // Token-specific hints
-        if (token instanceof Token.Identifier)
-            return "This identifier appears in an unexpected context. Check for typos or misplaced tokens.";
-
-        if (token instanceof Token.Keyword)
-            return "This keyword is used in an unexpected context. Check the correct syntax for using this keyword.";
-
-        if (token instanceof Token.Operator)
-            return "This operator appears in an invalid position. Check the syntax or for missing operands.";
-
-        return "Check for syntax errors or unexpected tokens near this location.";
-    }
-
-    /// Get a user-friendly name for the token type
-    private String getTokenTypeName(Token token)
-    {
-        return switch (token)
-        {
-            case null -> "end of file";
-            case Token.Keyword keyword -> "keyword";
-            case Token.Literal literal -> "literal";
-            case Token.Identifier identifier -> "identifier";
-            case Token.Operator operator -> "operator";
-            case Token.Delimiter delimiter -> "delimiter";
-            case Token.Comment comment -> "comment";
-            default -> "token";
-        };
-    }
-
-    /// Truncates long token values for display in error messages
-    private String truncateTokenForDisplay(String tokenValue)
-    {
-        if (tokenValue == null)
-            return "";
-
-        if (tokenValue.length() <= MAX_TOKEN_PREVIEW_LENGTH)
-            return tokenValue;
-
-        return tokenValue.substring(0, MAX_TOKEN_PREVIEW_LENGTH - 3) + "...";
-    }
-
-    /// Helper method to create SimpleCompilerError with the correct parameters
-    private SimpleCompilerError createError(String message, Coordinates coords)
-    {
-        if (coords == null)
-            return new SimpleCompilerError(message, 0, 0, "", "");
-        return new SimpleCompilerError(message, coords.line(), coords.column(), "", "");
-    }
-
-    /// Attempts to match a rule using the pre-built rule tree.
-    /// This leverages the cached tree structure for more efficient rule matching.
-    ///
-    /// @param cursor   TokenCursor for token management
-    /// @param ruleTree The pre-built rule tree for the rule
-    /// @param ruleMap  Map of rule names to rules for subrule lookups
-    /// @param errors   ErrorManager for reporting errors
-    /// @return A MatchResult containing match details, or null if no match
-    private MatchResult matchRuleUsingTree(TokenCursor cursor, RuleTree ruleTree, Map<String, Rule> ruleMap, ErrorManager errors)
-    {
-        // Track the best match
-        MatchResult bestMatch = null;
-        int bestTokensConsumed = 0;
-
-        // Track the best error match for better error reporting
-        MatchResult bestErrorMatch = null;
-        int bestErrorTokensConsumed = 0;
-        List<String> allExpectedTokens = new ArrayList<>();
-
-        // Get the current token
-        Token token = cursor.peek();
-        if (token == null)
-            return null;
-
-        // Find all matching path branches in the tree for the current token
-        List<RuleTreeNode> potentialMatches = ruleTree.findPotentialMatches(token);
-
-        // Try each potential matching path
-        for (RuleTreeNode matchNode : potentialMatches)
-        {
-            Definition definition = matchNode.definition();
-
-            // Mark the cursor position for backtracking
-            int startPosition = cursor.savePosition();
-
-            // Add the current definition to the parsing path for better error messages
-            if (definition.name != null && !definition.name.isEmpty())
-                parsingPathStack.push(ruleTree.getRule().getName() + ":" + definition.name);
-            else
-                parsingPathStack.push(ruleTree.getRule().getName() + ":variant" + potentialMatches.indexOf(matchNode));
-
-            // Try to match the definition
-            MatchResult result = matchDefinition(cursor, definition, ruleMap, errors);
-
-            // Remove the definition from the parsing path
-            parsingPathStack.pop();
-
-            if (result.matched)
-            {
-                int tokensConsumed = result.consumedTokens.size();
-
-                // Keep track of the definition that consumes the most tokens (longest match)
-                if (tokensConsumed > bestTokensConsumed)
-                {
-                    bestMatch = result;
-                    bestTokensConsumed = tokensConsumed;
-                }
-            }
-            else
-            {
-                // Even if it didn't match, track the best error information
-                int tokensConsumed = result.consumedTokens != null ? result.consumedTokens.size() : 0;
-                if (tokensConsumed > bestErrorTokensConsumed || 
-                    (tokensConsumed == bestErrorTokensConsumed && result.definition != null && result.definition.hint != null))
-                {
-                    bestErrorMatch = result;
-                    bestErrorTokensConsumed = tokensConsumed;
-                }
-
-                // Collect all expected tokens for comprehensive error reporting
-                if (result.expectedTokens != null)
-                {
-                    allExpectedTokens.addAll(result.expectedTokens);
-                }
-            }
-
-            // Reset to try the next definition
-            cursor.backtrack();
-        }
-
-        // If we found a match, advance the cursor past the consumed tokens
-        if (bestMatch != null)
-        {
-            // Advance cursor by the number of tokens consumed by the best match
-            for (int i = 0; i < bestTokensConsumed; i++)
-                cursor.consume();
-
-            // Commit this position
-            cursor.commitPosition();
-
-            return bestMatch;
-        }
-        else if (bestErrorMatch != null)
-        {
-            // No match, but we have error information
-            // Get the original definition from the rule to ensure we have the correct hint
-            Definition originalDef = null;
-            if (bestErrorMatch.definition != null) {
-                // Try to find the original definition with the hint in the rule
-                for (Definition def : ruleTree.getRule().getDefinitions()) {
-                    if (def.name != null && def.name.equals(bestErrorMatch.definition.name)) {
-                        originalDef = def;
-                        break;
-                    }
-                }
-            }
-
-            // Use the original definition if found (it should have the hint), otherwise use the one from bestErrorMatch
-            Definition defToUse = originalDef != null ? originalDef : bestErrorMatch.definition;
-
-            
-            // Create a new error result with combined error information and the correct definition with hint
-            return new MatchResult(
-                    false,
-                    defToUse,
-                    bestErrorMatch.consumedTokens,
-                    bestErrorMatch.childNodes,
-                    bestErrorMatch.localData,
-                    allExpectedTokens,
-                    bestErrorMatch.actualToken
-            );
-        }
-
-        // Fallback to traditional matching if the tree doesn't provide a match
-        return matchRule(cursor, ruleTree.getRule(), ruleMap, errors);
-    }
-
-    /// Attempts to match a rule at the current cursor position.
-    ///
-    /// @param cursor  TokenCursor for token management
-    /// @param rule    The rule to match
-    /// @param ruleMap Map of rule names to rules for subrule lookups
-    /// @param errors  ErrorManager for reporting errors
-    /// @return A MatchResult containing match details, or null if no match
-    private MatchResult matchRule(TokenCursor cursor, Rule rule, Map<String, Rule> ruleMap, ErrorManager errors)
-    {
-        // Track the best match among all definition variants
-        MatchResult bestMatch = null;
-        int bestTokensConsumed = 0;
-
-        // Also track the best error match for better error reporting
-        MatchResult bestErrorMatch = null;
-        int bestErrorTokensConsumed = 0;
-        List<String> allExpectedTokens = new ArrayList<>();
-
-        // Push current rule onto parsing path stack for better error messages
-        parsingPathStack.push(rule.getName());
-
-        // Try each definition variant of the rule
-        for (Definition definition : rule.getDefinitions())
-        {
-            // Skip empty definitions
-            if (definition.steps.isEmpty())
-                continue;
-
-            // Mark the cursor position for backtracking
-            int startPosition = cursor.savePosition();
-
-            // Add definition variant to parsing path if it has a name
-            if (definition.name != null && !definition.name.isEmpty())
-            {
-                parsingPathStack.push(rule.getName() + ":" + definition.name);
-            }
-
-            // Match result for this definition attempt
-            MatchResult result = matchDefinition(cursor, definition, ruleMap, errors);
-
-            // Remove definition from parsing path
-            parsingPathStack.pop();
-
-            if (result != null)
-            {
-                if (result.matched)
-                {
-                    int tokensConsumed = result.consumedTokens.size();
-
-                    // Keep track of the definition that consumes the most tokens (longest match)
-                    if (tokensConsumed > bestTokensConsumed)
-                    {
-                        bestMatch = result;
-                        bestTokensConsumed = tokensConsumed;
-                    }
-                }
-                else
-                {
-                    // Even if it didn't match, track the best error information
-                    int tokensConsumed = result.consumedTokens != null ? result.consumedTokens.size() : 0;
-                    if (tokensConsumed > bestErrorTokensConsumed || 
-                        (tokensConsumed == bestErrorTokensConsumed && result.definition != null && result.definition.hint != null))
-                    {
-                        bestErrorMatch = result;
-                        bestErrorTokensConsumed = tokensConsumed;
-                    }
-
-                    // Collect all expected tokens for comprehensive error reporting
-                    if (result.expectedTokens != null)
-                        allExpectedTokens.addAll(result.expectedTokens);
-                }
-            }
-
-            // Reset to try the next definition
-            cursor.backtrack();
-        }
-
-        // Pop the rule from the parsing path stack
-        parsingPathStack.pop();
-
-        // If we found a match, advance the cursor past the consumed tokens
-        if (bestMatch != null)
-        {
-            // Advance cursor by the number of tokens consumed by the best match
-            for (int i = 0; i < bestTokensConsumed; i++)
-                cursor.consume();
-
-            // Commit this position
-            cursor.commitPosition();
-
-            return bestMatch;
-        }
-        else if (bestErrorMatch != null)
-        {
-            // Enhance error information with the current parsing path context
-            List<String> enhancedExpectedTokens = new ArrayList<>(allExpectedTokens);
-
-            // Create a new error result with combined error information
-            return new MatchResult(
-                    false,
-                    bestErrorMatch.definition,
-                    bestErrorMatch.consumedTokens,
-                    bestErrorMatch.childNodes,
-                    bestErrorMatch.localData,
-                    enhancedExpectedTokens,
-                    bestErrorMatch.actualToken
-            );
-        }
-
-        // No match and no error information
-        return null;
-    }
-
-    /// Attempts to match a definition at the current cursor position.
-    ///
-    /// @param cursor     TokenCursor for token management
-    /// @param definition The definition to match
-    /// @param ruleMap    Map of rule names to rules for subrule lookups
-    /// @param errors     ErrorManager for reporting errors
-    /// @return A MatchResult containing match details, or null if no match
-    private MatchResult matchDefinition(TokenCursor cursor, Definition definition, Map<String, Rule> ruleMap, ErrorManager errors)
-    {
-        List<Token> consumedTokens = new ArrayList<>();
-        List<Object> childNodes = new ArrayList<>();
-        Map<String, Object> localData = new HashMap<>();
-
-        // Keep track of the position before each step attempt for better error reporting
-        List<Token> successfullyConsumedTokens = new ArrayList<>();
-        List<String> expectedTokens = new ArrayList<>();
-
-        // Attempt to match each step in the definition
-        for (int i = 0; i < definition.steps.size(); i++)
-        {
-            Step step = definition.steps.get(i);
-
-            // Push step information into parsing path
-            String stepDesc = getStepDescription(step, i);
-            parsingPathStack.push(stepDesc);
-
-            boolean stepMatched = matchStep(cursor, step, ruleMap, consumedTokens, childNodes, localData, errors);
-
-            // Pop step information from parsing path
-            parsingPathStack.pop();
-
-            if (!stepMatched)
-            {
-                // Get the current token that caused the failure
-                Token failedAtToken = cursor.peek();
-
-                // Collect expected token information based on the step type
-                switch (step)
-                {
-                    case Step.Keyword keyword -> expectedTokens.add("keyword '" + keyword.value() + "'");
-                    case Step.Literal literal -> expectedTokens.add("literal of type '" + literal.type() + "'");
-                    case Step.Identifier identifier ->
-                            expectedTokens.add("identifier of type '" + identifier.type() + "'");
-                    case Step.Operator operator -> expectedTokens.add("operator '" + operator.value() + "'");
-                    case Step.Delimiter delimiter -> expectedTokens.add("delimiter '" + delimiter.value() + "'");
-                    case Step.Rule ruleStep -> expectedTokens.add("rule '" + ruleStep.ruleName() + "'");
-                    case null, default ->
-                    {
-                        // For complex steps like Repeat or Optional, provide more specific information
-                        switch (step)
-                        {
-                            case Step.Repeat _ ->
-                                    expectedTokens.add("repeated sequence in '" + definition.name + "'");
-                            case Step.Optional _ ->
-                                    expectedTokens.add("optional sequence in '" + definition.name + "'");
-                            case null, default ->
-                                    expectedTokens.add("valid syntax for step " + (i + 1) + " in rule '" + definition.name + "'");
-                        }
-                    }
-                }
-
-                // Generate a helpful parsing path for context in error messages
-                String parsingPath = String.join(" → ", new ArrayList<>(parsingPathStack));
-                if (!parsingPath.isEmpty())
-                    expectedTokens.add("(in path: " + parsingPath + ")");
-
-                // Create a MatchResult with the failure information
-                return new MatchResult(
-                        false,
-                        definition,
-                        successfullyConsumedTokens,
-                        childNodes,
-                        localData,
-                        expectedTokens,
-                        failedAtToken
-                );
-            }
-
-            // Update our tracking of successful tokens
-            successfullyConsumedTokens = new ArrayList<>(consumedTokens);
-        }
-
-        // If we get here, all steps matched successfully
-        return new MatchResult(true, definition, consumedTokens, childNodes, localData, null, null);
-    }
-
-    /// Gets a descriptive string for a step to use in error messages
-    private String getStepDescription(Step step, int index)
-    {
-        return switch (step)
-        {
-            case Step.Keyword keyword -> "keyword:" + keyword.value();
-            case Step.Literal literal -> "literal:" + literal.type();
-            case Step.Identifier identifier -> "identifier:" + identifier.type();
-            case Step.Operator operator -> "operator:" + operator.value();
-            case Step.Delimiter delimiter -> "delimiter:" + delimiter.value();
-            case Step.Rule ruleStep -> "rule:" + ruleStep.ruleName();
-            case Step.Repeat repeat -> "repeat:" + index;
-            case Step.Optional optional -> "optional:" + index;
-            case null, default -> "step:" + index;
-        };
-    }
-
-    /// Attempts to match a step at the current cursor position.
-    ///
-    /// @param cursor         TokenCursor for token management
-    /// @param step           The step to match
-    /// @param ruleMap        Map of rule names to rules for subrule lookups
-    /// @param consumedTokens List to collect consumed tokens
-    /// @param childNodes     List to collect child nodes
-    /// @param localData      Map to collect local data from steps
-    /// @param errors         ErrorManager for reporting errors
-    /// @return true if the step matched, false otherwise
-    private boolean matchStep(
-            TokenCursor cursor,
-            Step step,
-            Map<String, Rule> ruleMap,
-            List<Token> consumedTokens,
-            List<Object> childNodes,
-            Map<String, Object> localData,
-            ErrorManager errors)
-    {
-        switch (step)
-        {
-            case Step.Keyword keyword ->
-            {
-                Token token = cursor.peek();
-                if (token instanceof Token.Keyword && keyword.value().equals(token.getValue()))
-                {
-                    consumedTokens.add(cursor.consume());
-                    if (keyword.action() != null)
-                        applyTokenAction(keyword.action(), token, localData);
-                    return true;
-                }
-                return false;
-            }
-            case Step.Literal literal ->
-            {
-                Token token = cursor.peek();
-                if (token instanceof Token.Literal && literal.type().equals(((Token.Literal) token).type()))
-                {
-                    consumedTokens.add(cursor.consume());
-                    if (literal.action() != null)
-                        applyTokenAction(literal.action(), token, localData);
-                    return true;
-                }
-                return false;
-            }
-            case Step.Identifier identifier ->
-            {
-                Token token = cursor.peek();
-                if (token instanceof Token.Identifier && identifier.type().equals(((Token.Identifier) token).type()))
-                {
-                    consumedTokens.add(cursor.consume());
-                    if (identifier.action() != null)
-                        applyTokenAction(identifier.action(), token, localData);
-                    return true;
-                }
-                return false;
-            }
-            case Step.Operator operator ->
-            {
-                Token token = cursor.peek();
-                if (token instanceof Token.Operator && operator.value().equals(token.getValue()))
-                {
-                    consumedTokens.add(cursor.consume());
-                    if (operator.action() != null)
-                        applyTokenAction(operator.action(), token, localData);
-                    return true;
-                }
-                return false;
-            }
-            case Step.Delimiter delimiter ->
-            {
-                Token token = cursor.peek();
-                if (token instanceof Token.Delimiter && delimiter.value().equals(token.getValue()))
-                {
-                    consumedTokens.add(cursor.consume());
-                    if (delimiter.action() != null)
-                        applyTokenAction(delimiter.action(), token, localData);
-                    return true;
-                }
-                return false;
-            }
-            case Step.Rule ruleStep ->
-            {
-                String ruleName = ruleStep.ruleName();
-                Rule subrule = ruleMap.get(ruleName);
-
-                if (subrule == null)
-                {
-                    Token token = cursor.peek();
-                    int line = 0;
-                    int column = 0;
-                    String tokenValue = "";
-
-                    if (token != null && token.position() != null)
-                    {
-                        line = token.position().line();
-                        column = token.position().column();
-                        tokenValue = token.getValue();
-                    }
-
-                    errors.error("Undefined rule: " + ruleName, line, column, tokenValue, "");
-                    return false;
-                }
-
-                cursor.savePosition();
-
-                // Try to match the subrule
-                MatchResult result = matchRule(cursor, subrule, ruleMap, errors);
-
-                if (result != null && result.matched)
-                {
-                    // Add the tokens that were consumed by the subrule
-                    consumedTokens.addAll(result.consumedTokens);
-
-                    // Create a node from the rule result
-                    if (result.definition != null && result.definition.builder != null)
-                    {
-                        // Create context for the builder
-                        ASTBuildContext builderContext = new ASTBuildContext();
-
-                        // Transfer local data to context
-                        for (Map.Entry<String, Object> entry : result.localData.entrySet())
-                            builderContext.put(entry.getKey(), entry.getValue());
-
-                        // Build the node
-                        Supplier<Object> nodeBuilder = result.definition.builder.apply(builderContext);
-                        Object node = nodeBuilder.get();
-
-                        // Call the consumer to process the child node
-                        if (ruleStep.consumer() != null && node != null)
-                        {
-                            ASTBuildContext consumerContext = new ASTBuildContext();
-                            // First, transfer any local data from the parent context
-                            for (Map.Entry<String, Object> entry : localData.entrySet())
-                                consumerContext.put(entry.getKey(), entry.getValue());
-
-                            // Ensure any lists required by the consumer exist
-                            // This is particularly important for "elements" list used in Main.java:88
-                            if (localData.containsKey("elements") && localData.get("elements") instanceof List)
-                                ensureList(consumerContext.context, "elements");
-
-                            // Then add the node itself
-                            consumerContext.put("node", node);
-
-                            // Call the consumer with the node
-                            Consumer<Object> consumer = ruleStep.consumer().apply(consumerContext);
-                            if (consumer != null)
-                                consumer.accept(node);
-
-                            // Transfer any changes back to the local data
-                            for (String key : consumerContext.context.keySet())
-                                localData.put(key, consumerContext.get(key));
-
-                            childNodes.add(node);
-                        }
-                    }
-
-                    return true;
-                }
-                else
-                {
-                    // Reset cursor position
-                    cursor.backtrack();
-                    return false;
-                }
-            }
-            case Step.Repeat repeat ->
-            {
-                // Initialize any accumulators
-                if (repeat.initializer() != null)
-                {
-                    // Create context for initializer
-                    ASTBuildContext initContext = new ASTBuildContext();
-
-                    // Transfer all local data to the initializer context
-                    for (Map.Entry<String, Object> entry : localData.entrySet())
-                        initContext.put(entry.getKey(), entry.getValue());
-
-                    // Apply the initializer to set up any accumulator data structures
-                    ASTAction initializer = repeat.initializer();
-                    if (initializer != null)
-                    {
-                        initializer.apply(initContext);
-
-                        // Ensure key data structures exist in both contexts
-                        // This addresses the specific NPE with the elements list
-                        if (initContext.context.containsKey("elements"))
-                            ensureList(localData, "elements");
-                    }
-
-                    // Transfer any new context values back to localData
-                    for (String key : initContext.context.keySet())
-                        localData.put(key, initContext.get(key));
-                }
-
-                boolean matchedOnce = false;
-
-                // Keep matching the repeat children as long as possible
-                while (true)
-                {
-                    int savePos = cursor.savePosition();
-                    boolean allChildrenMatched = true;
-
-                    // Try to match all children in the repeat
-                    List<Token> repeatTokens = new ArrayList<>();
-                    List<Object> repeatNodes = new ArrayList<>();
-                    Map<String, Object> repeatLocalData = new HashMap<>(localData); // Clone current local data
-
-                    for (Step childStep : repeat.children())
-                    {
-                        boolean childMatched = matchStep(
-                                cursor, childStep, ruleMap, repeatTokens, repeatNodes, 
-                                repeatLocalData, errors);
-
-                        if (!childMatched)
-                        {
-                            allChildrenMatched = false;
-                            break;
-                        }
-                    }
-
-                    if (allChildrenMatched)
-                    {
-                        // If all children matched, add their tokens and nodes
-                        consumedTokens.addAll(repeatTokens);
-                        childNodes.addAll(repeatNodes);
-                        matchedOnce = true;
-
-                        // Transfer any new context values back to localData
-                        for (String key : repeatLocalData.keySet())
-                            localData.put(key, repeatLocalData.get(key));
-
-                        // Commit this position before trying again
-                        cursor.commitPosition();
-                    }
-                    else
-                    {
-                        // If any child didn't match, backtrack and break the loop
-                        cursor.backtrack();
-                        break;
-                    }
-                }
-
-                // A repeat can match zero times and still be successful
+            // Prefer any Success over any Failure
+            if (this instanceof Success && other instanceof Failure)
                 return true;
-
-                // A repeat can match zero times and still be successful
-            }
-            case Step.Optional optional ->
-            {
-                int savePos = cursor.savePosition();
-                boolean allChildrenMatched = true;
-
-                // Try to match all children in the optional group
-                List<Token> optionalTokens = new ArrayList<>();
-                List<Object> optionalNodes = new ArrayList<>();
-
-                for (Step childStep : optional.children())
-                {
-                    boolean childMatched = matchStep(
-                            cursor, childStep, ruleMap, optionalTokens, optionalNodes, localData, errors);
-
-                    if (!childMatched)
-                    {
-                        allChildrenMatched = false;
-                        break;
-                    }
-                }
-
-                if (allChildrenMatched)
-                {
-                    // If all children matched, add their tokens and nodes
-                    consumedTokens.addAll(optionalTokens);
-                    childNodes.addAll(optionalNodes);
-
-                    // Commit this position
-                    cursor.commitPosition();
-                }
-                else
-                {
-                    // If any child didn't match, backtrack and apply the fallback
-                    cursor.backtrack();
-
-                    // Apply optional fallback
-                    if (optional.fallback() != null)
-                    {
-                        // Create context for fallback
-                        ASTBuildContext fallbackContext = new ASTBuildContext();
-                        for (Map.Entry<String, Object> entry : localData.entrySet())
-                            fallbackContext.put(entry.getKey(), entry.getValue());
-                        optional.fallback().apply(fallbackContext);
-                        // Transfer any new context values back to localData
-                        for (String key : fallbackContext.context.keySet())
-                            localData.put(key, fallbackContext.get(key));
-                    }
-                }
-
-                // An optional step always succeeds, regardless of whether its content matched
-                return true;
-            }
-            case Step.Choice choice ->
-            {
-                // Try each alternative in sequence, use the first one that matches
-                List<Token> bestTokens = null;
-                List<Object> bestNodes = null;
-                Map<String, Object> bestLocalData = null;
-                boolean anyMatched = false;
-                
-                int maxConsumedTokens = 0;
-                
-                // For error reporting
-                List<String> allExpectedTokens = new ArrayList<>();
-                
-                // Try each alternative
-                for (List<Step> alternative : choice.alternatives())
-                {
-                    // Save position before trying this alternative
-                    int savePos = cursor.savePosition();
-                    
-                    // Clone local data for this attempt
-                    Map<String, Object> alternativeLocalData = new HashMap<>(localData);
-                    
-                    // Try to match all steps in this alternative
-                    List<Token> alternativeTokens = new ArrayList<>();
-                    List<Object> alternativeNodes = new ArrayList<>();
-                    boolean allStepsMatched = true;
-                    
-                    for (Step step1 : alternative)
-                    {
-                        boolean stepMatched = matchStep(
-                                cursor, step1, ruleMap, alternativeTokens, alternativeNodes, 
-                                alternativeLocalData, errors);
-                        
-                        if (!stepMatched)
-                        {
-                            // If we expected tokens, collect them for error reporting
-                            allStepsMatched = false;
-                            break;
-                        }
-                    }
-                    
-                    if (allStepsMatched)
-                    {
-                        // This alternative fully matched
-                        // If it consumed more tokens than previous alternatives, make it the best
-                        if (!anyMatched || alternativeTokens.size() > maxConsumedTokens)
-                        {
-                            bestTokens = alternativeTokens;
-                            bestNodes = alternativeNodes;
-                            bestLocalData = alternativeLocalData;
-                            maxConsumedTokens = alternativeTokens.size();
-                            anyMatched = true;
-                            
-                            // Commit this position
-                            cursor.commitPosition();
-                            
-                            // In strict mode, we'd break here to use the first match
-                            // For longest match strategy, continue to try other alternatives
-                        }
-                        else
-                        {
-                            // Not better than what we have, backtrack
-                            cursor.backtrack();
-                        }
-                    }
-                    else
-                    {
-                        // This alternative didn't match, backtrack
-                        cursor.backtrack();
-                    }
-                }
-                
-                if (anyMatched)
-                {
-                    // Use the best match we found
-                    consumedTokens.addAll(bestTokens);
-                    childNodes.addAll(bestNodes);
-                    
-                    // Transfer best local data back to the caller's local data
-                    localData.clear();
-                    localData.putAll(bestLocalData);
-                    
-                    return true;
-                }
-                
-                // No alternatives matched
+            if (this instanceof Failure && other instanceof Success)
                 return false;
-            }
-            case null, default ->
-            {
-            }
+
+            // Between two Successes, prefer the one that consumed more tokens
+            if (this instanceof Success sThis && other instanceof Success sOther)
+                return sThis.numberOfTokensOfParsed() > sOther.numberOfTokensOfParsed();
+
+            // Between two Failures, prefer the one that progressed further before failing
+            if (this instanceof Failure fThis && other instanceof Failure fOther)
+                return fThis.numberOfTokensOfParsedUntilFailure() >= fOther.numberOfTokensOfParsedUntilFailure();
+
+            return false;
         }
 
-        // If we get here, the step type is not recognized
-        return false;
-    }
-
-    /// Helper method to apply a TokenAction with the correct context
-    private void applyTokenAction(TokenAction action, Token token, Map<String, Object> localData)
-    {
-        if (action == null) return;
-
-        // Create a context for the action
-        ASTBuildContext actionContext = new ASTBuildContext();
-
-        // Copy all local data to the context
-        for (Map.Entry<String, Object> entry : localData.entrySet())
-            actionContext.put(entry.getKey(), entry.getValue());
-
-        // Apply the action with the context
-        Consumer<Token> consumer = action.apply(actionContext);
-        if (consumer != null)
-            consumer.accept(token);
-
-        // Copy any new or modified data back to the local data map
-        for (String key : actionContext.context.keySet())
-            localData.put(key, actionContext.get(key));
-    }
-
-    /// Ensures a list exists in the localData map for the given key.
-    /// If the key doesn't exist or its value is null, creates a new ArrayList.
-    private <T> List<T> ensureList(Map<String, Object> localData, String key)
-    {
-        @SuppressWarnings("unchecked")
-        List<T> list = (List<T>) localData.get(key);
-        if (list == null)
+        default int numberOfTokensOfParsed()
         {
-            list = new ArrayList<>();
-            localData.put(key, list);
-        }
-        return list;
-    }
-
-    /// Enum representing the kinds of tokens for matching purposes.
-    private enum TokenKind
-    {
-        KEYWORD,
-        LITERAL,
-        IDENTIFIER,
-        OPERATOR,
-        DELIMITER,
-        ANY
-    }
-
-    /// Class that holds the result of a rule match attempt.
-    private static class MatchResult
-    {
-        final boolean matched;
-        final Definition definition;
-        final List<Token> consumedTokens;
-        final List<Object> childNodes;
-        final Map<String, Object> localData;
-        final List<String> expectedTokens;
-        final Token actualToken;
-
-        // Constructor for successful matches
-        MatchResult(boolean matched, Definition definition, List<Token> consumedTokens,
-                    List<Object> childNodes, Map<String, Object> localData)
-        {
-            this(matched, definition, consumedTokens, childNodes, localData, null, null);
+            return switch (this) {
+                case Success(int numberOfTokensOfParsed, _) -> numberOfTokensOfParsed;
+                case Failure(int numberOfTokensOfParsedUntilFailure, _) -> numberOfTokensOfParsedUntilFailure;
+            };
         }
 
-        // Extended constructor with error information
-        MatchResult(boolean matched, Definition definition, List<Token> consumedTokens,
-                    List<Object> childNodes, Map<String, Object> localData,
-                    List<String> expectedTokens, Token actualToken)
-        {
-            this.matched = matched;
-            this.definition = definition;
-            this.consumedTokens = consumedTokens;
-            this.childNodes = childNodes;
-            this.localData = localData;
-            this.expectedTokens = expectedTokens;
-            this.actualToken = actualToken;
-        }
-    }
-
-    /// Represents a tree structure for a grammar rule.
-    /// The tree is used to optimize rule matching by pre-processing rule definitions
-    /// and organizing them based on potential starting tokens.
-    private static class RuleTree
-    {
-        private final Rule rule;
-        private final Map<TokenType, List<RuleTreeNode>> tokenToDefinitions = new HashMap<>();
-
-        public RuleTree(Rule rule)
-        {
-            this.rule = rule;
-            buildTree();
-        }
-
-        public Rule getRule()
-        {
-            return rule;
-        }
-
-        /// Builds the tree structure by analyzing each definition's first step
-        /// and categorizing based on potential matching token types.
-        private void buildTree()
-        {
-            for (Definition definition : rule.getDefinitions())
-            {
-                // Skip empty definitions
-                if (definition.steps.isEmpty())
-                    continue;
-
-                // Analyze the first step of the definition to determine potential matching tokens
-                Step firstStep = definition.steps.get(0);
-                List<TokenType> potentialTokenTypes = getPotentialTokenTypes(firstStep);
-
-                // Add this definition to the tree under all potential token types
-                RuleTreeNode node = new RuleTreeNode(definition);
-                for (TokenType tokenType : potentialTokenTypes)
-                    tokenToDefinitions.computeIfAbsent(tokenType, k -> new ArrayList<>()).add(node);
-            }
-        }
-
-        /// Determines what token types could potentially match the given step.
-        private List<TokenType> getPotentialTokenTypes(Step step)
-        {
-            List<TokenType> types = new ArrayList<>();
-
-            switch (step)
-            {
-                case Step.Keyword keyword -> types.add(new TokenType(TokenKind.KEYWORD, keyword.value()));
-                case Step.Literal literal -> types.add(new TokenType(TokenKind.LITERAL, literal.type()));
-                case Step.Identifier identifier -> types.add(new TokenType(TokenKind.IDENTIFIER, identifier.type()));
-                case Step.Operator operator -> types.add(new TokenType(TokenKind.OPERATOR, operator.value()));
-                case Step.Delimiter delimiter -> types.add(new TokenType(TokenKind.DELIMITER, delimiter.value()));
-                case Step.Optional optional ->
-                {
-                    // For optional steps, include both the potential token types of its children
-                    // and also add a wildcard to represent that this step can be skipped
-                    for (Step childStep : optional.children())
-                        types.addAll(getPotentialTokenTypes(childStep));
-
-                    // Add special wildcard that matches any token
-                    types.add(new TokenType(TokenKind.ANY, "*"));
-                }
-                case Step.Repeat repeat ->
-                {
-                    // For repeat steps, include the potential token types of its children
-                    // since we might match this step at least once
-                    for (Step childStep : repeat.children())
-                        types.addAll(getPotentialTokenTypes(childStep));
-
-                    // Also add a wildcard since repeat can match zero times
-                    types.add(new TokenType(TokenKind.ANY, "*"));
-                }
-                case Step.Rule rule1 ->
-                    // For subrules, we'd need to analyze the subrule definitions
-                    // For simplicity, we'll just use a wildcard for now
-                        types.add(new TokenType(TokenKind.ANY, "*"));
-                case null, default ->
-                {
-                }
-            }
-
-            return types;
-        }
-
-        /// Finds potential matching definitions for the given token.
-        public List<RuleTreeNode> findPotentialMatches(Token token)
-        {
-            List<RuleTreeNode> matches = new ArrayList<>();
-
-            // Check for specific token type matches
-            TokenType exactType = tokenTypeFromToken(token);
-            if (exactType != null && tokenToDefinitions.containsKey(exactType))
-                matches.addAll(tokenToDefinitions.get(exactType));
-
-            // Also include any wildcards that match any token
-            TokenType wildcard = new TokenType(TokenKind.ANY, "*");
-            if (tokenToDefinitions.containsKey(wildcard))
-                matches.addAll(tokenToDefinitions.get(wildcard));
-
-            return matches;
-        }
-
-        /// Converts a token to a TokenType for matching in the tree.
-        private TokenType tokenTypeFromToken(Token token)
-        {
-            return switch (token)
-            {
-                case Token.Keyword keyword -> new TokenType(TokenKind.KEYWORD, token.getValue());
-                case Token.Literal literal -> new TokenType(TokenKind.LITERAL, literal.type());
-                case Token.Identifier identifier -> new TokenType(TokenKind.IDENTIFIER, identifier.type());
-                case Token.Operator operator -> new TokenType(TokenKind.OPERATOR, token.getValue());
-                case Token.Delimiter delimiter -> new TokenType(TokenKind.DELIMITER, token.getValue());
-                case null, default -> null;
+        default Optional<Definition> definition() {
+            return switch (this) {
+                case Success(_, Optional<Definition> definition) -> definition;
+                case Failure(_, Optional<Definition> definition) -> definition;
             };
         }
     }
 
-    /// Node in the rule tree representing a definition with its potential matching characteristics.
-    private record RuleTreeNode(Definition definition)
+
+    record Success(int numberOfTokensOfParsed, Optional<Definition> definition) implements ParseResponse {}
+    record Failure(int numberOfTokensOfParsedUntilFailure, Optional<Definition> definition) implements ParseResponse {}
+
+    /// Attempts to parse a single `Step` within a rule.
+    /// A `Step` represents an atomic or composite grammar construct, including:
+    /// - Terminals: `Keyword`, `Operator`, `Delimiter`
+    /// - Typed tokens: `Literal`, `Identifier`
+    /// - Rule references: `Rule`
+    /// - Combinators: `Repeat`, `Optional`, `Choice`
+    /// This method:
+    /// - Checks whether the input tokens match the expectations of the given `Step`
+    /// - Executes any attached semantic actions if the match succeeds
+    /// - Returns a `ParseResponse` indicating match success or failure and number of tokens processed
+    /// This function is used internally when parsing rule definitions.
+    ///
+    /// @param step The grammar step to match.
+    /// @return A `ParseResponse` representing the match result and token consumption.
+    ParseResponse parseStep(Step step)
     {
+        cursor.markPosition();
+                return switch (step) {
+            case Step.Keyword(String value, _) -> {
+                Token current = cursor.readNextToken();
+                                if  (current instanceof Token.Keyword(_, String v) && v.equals(value))
+                {
+                                        cursor.commitPosition();
+                    yield new Success(1, Optional.empty());
+                }
+                cursor.jumpBackToMark();
+                                yield new Failure(0, Optional.empty());
+            }
+            case Step.Literal(String type, _) -> {
+                Token current = cursor.readNextToken();
+                                if  (current instanceof Token.Literal(_, String t, _) && t.equals(type))
+                {
+                                        cursor.commitPosition();
+                    yield new Success(1, Optional.empty());
+                }
+                cursor.jumpBackToMark();
+                                yield new Failure(0, Optional.empty());
+            }
+            case Step.Identifier(String type, _) -> {
+                Token current = cursor.readNextToken();
+                                if  (current instanceof Token.Identifier(_, String t, _) && t.equals(type))
+                {
+                                        cursor.commitPosition();
+                    yield new Success(1, Optional.empty());
+                }
+                cursor.jumpBackToMark();
+                                yield new Failure(0, Optional.empty());
+            }
+            case Step.Operator(String value, _) -> {
+                Token current = cursor.readNextToken();
+                                if  (current instanceof Token.Operator(_, String v) && v.equals(value))
+                {
+                                        cursor.commitPosition();
+                    yield new Success(1, Optional.empty());
+                }
+                cursor.jumpBackToMark();
+                                yield new Failure(0, Optional.empty());
+            }
+            case Step.Delimiter(String value, _) -> {
+                Token current = cursor.readNextToken();
+                                if  (current instanceof Token.Delimiter(_, String v) && v.equals(value))
+                {
+                                        cursor.commitPosition();
+                    yield new Success(1, Optional.empty());
+                }
+                cursor.jumpBackToMark();
+                                yield new Failure(0, Optional.empty());
+            }
+            case Step.Rule(String name, _) -> {
+                                ParseResponse attempt = parseRule(ruleTable.get(name));
+                if (!(attempt instanceof Success))
+                {
+                                        cursor.jumpBackToMark();
+                    yield new Failure(0, Optional.empty());
+                }
+                // Speculatively advance by the number of tokens the rule would consume
+                int n = attempt.numberOfTokensOfParsed();
+                for (int i = 0; i < n; i++)
+                {
+                    if (cursor.readNextToken() == null)
+                        break;
+                }
+                cursor.commitPosition();
+                yield attempt;
+            }
+            case Step.Repeat(List<Step> children, _) ->
+            {
+                int totalConsumed = 0;
+
+                while (true) {
+                    int positionBeforeAttempt = cursor.getCurrentPosition();
+                    cursor.markPosition();
+
+                    boolean allStepsPassed = true;
+                    int consumed = 0;
+                    for (Step child : children) {
+                        ParseResponse response = parseStep(child);
+                        if (response instanceof Failure) {
+                            allStepsPassed = false;
+                            break;
+                        }
+
+                        consumed += response.numberOfTokensOfParsed();
+                    }
+
+                    if (!allStepsPassed || consumed == 0) {
+                        // Roll back this attempt and stop repeating
+                        cursor.jumpBackToMark();
+                        break;
+                    }
+
+                    totalConsumed += consumed;
+                    // Keep the progress of this iteration
+                    cursor.commitPosition();
+
+                    // Extra guard: if somehow no advancement happened, break to avoid infinite loop
+                    if (cursor.getCurrentPosition() == positionBeforeAttempt)
+                        break;
+                }
+
+                                cursor.commitPosition();
+                yield new Success(totalConsumed, Optional.empty());
+            }
+            case Step.Optional(List<Step> children, _) ->
+            {
+                cursor.markPosition();
+
+                int consumed = 0;
+                boolean allStepsPassed = true;
+
+                for (Step child : children) {
+                    ParseResponse response = parseStep(child);
+                    if (response instanceof Failure) {
+                        allStepsPassed = false;
+                        break;
+                    }
+
+                    consumed += response.numberOfTokensOfParsed();
+                }
+
+                if (!allStepsPassed) {
+                    cursor.jumpBackToMark(); // revert inner optional attempt
+                    cursor.commitPosition();  // discard step-level mark
+                    yield new Success(consumed, Optional.empty());
+                }
+
+                cursor.commitPosition();
+                yield new Success(consumed, Optional.empty());
+            }
+            case Step.Choice(Set<List<Step>> alternatives) ->
+            {
+                for (List<Step> alternative : alternatives) {
+                    cursor.markPosition();
+
+                    int consumed = 0;
+                    boolean allStepsPassed = true;
+
+                    for (Step child : alternative) {
+                        ParseResponse response = parseStep(child);
+                        if (response instanceof Failure) {
+                            allStepsPassed = false;
+                            break;
+                        }
+
+                        consumed += response.numberOfTokensOfParsed();
+                    }
+
+                    if (allStepsPassed)
+                    {
+                        // Clear alt mark as we're keeping this advancement
+                        cursor.commitPosition();
+                        // Also discard step-level mark for this step
+                        cursor.commitPosition();
+                                                yield new Success(consumed, Optional.empty());
+                    }
+                    else
+                    {
+                        // Revert alt mark before trying next alternative
+                        cursor.jumpBackToMark();
+                    }
+                }
+
+                                cursor.jumpBackToMark();
+                yield new Failure(0, Optional.empty());
+            }
+        };
     }
 
-    /// Represents a type of token for matching in the rule tree.
-    private record TokenType(TokenKind kind, String value)
+    /// Attempts to parse a complete `Rule` from the current token stream position.
+    /// Each rule may contain multiple definitions (alternative step sequences).
+    /// This method evaluates all definitions and returns a `ParseResponse` representing the best result.
+    /// - If a definition matches fully, the result is `Success`.
+    /// - If none succeed, the most-progressing `Failure` is returned.
+    /// Note: This method does not consume tokens; it only attempts the match.
+    ///
+    /// @param rule The rule to try parsing.
+    /// @return A `ParseResponse` indicating the match outcome.
+    ParseResponse parseRule(Rule rule)
     {
-
-        @Override
-        public boolean equals(Object o)
-        {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            TokenType tokenType = (TokenType) o;
-            return kind == tokenType.kind && Objects.equals(value, tokenType.value);
+        if (rule == null) {
+                        return new Failure(0, Optional.empty());
         }
 
+        cursor.markPosition();
+        int initialPosition = cursor.getCurrentPosition();
+        
+        ParseResponse best = new Failure(0, Optional.empty());
+
+        for (Definition def : rule.getDefinitions())
+        {
+            cursor.markPosition();
+            
+            int consumed = 0;
+            boolean allStepsPassed = true;
+
+            for (Step step : def.steps)
+            {
+                ParseResponse r = parseStep(step);
+                if (r instanceof Failure)
+                {
+                    allStepsPassed = false;
+                    // progress up to the failure point for this definition
+                    consumed += r.numberOfTokensOfParsed();
+                                        break;
+                }
+
+                consumed += r.numberOfTokensOfParsed();
+            }
+
+            // Do not consume input in this method — always roll back
+            cursor.jumpBackToMark();
+
+            ParseResponse candidate = allStepsPassed
+                    ? new Success(consumed, Optional.of(def))
+                    : new Failure(consumed, Optional.of(def));
+
+            
+            if (candidate.isBetterThan(best))
+                best = candidate;
+        }
+
+        // Restore to the initial position for the caller
+        cursor.jumpBackToMark();
+        cursor.setPosition(initialPosition);
+
+        
+        return best;
+    }
+
+    /// Parses the body of a given `Definition` (i.e., a specific sequence of `Step` elements).
+    /// This method is used internally once a rule has been selected and a specific definition has been chosen to match.
+    /// If the definition matches fully, it returns the resulting AST node (built via the rule's `ASTNodeSupplier`).
+    /// If the definition fails, `null` is returned.
+    ///
+    /// @param definition The rule definition to parse.
+    /// @return The parsed AST node, or `null` if the definition could not be matched.
+    Object parseRule(Definition definition)
+    {
+        if (definition == null)
+        {
+                        return null;
+        }
+
+        
+        ASTBuildContext ctx = new ASTBuildContext();
+        Deque<Runnable> cleanups = new ArrayDeque<>();
+
+        // Helper lambdas to execute steps (self-referential via 1-element array)
+        final java.util.function.Function<Step, Boolean>[] execStep = new java.util.function.Function[]{null};
+        execStep[0] = new java.util.function.Function<>()
+        {
+            @Override
+            public Boolean apply(Step step)
+            {
+                                return switch (step)
+                {
+                    case Step.Keyword(String value, TokenAction action) -> {
+                        cursor.markPosition();
+                        Token t = cursor.readNextToken();
+                        if (t instanceof Token.Keyword(_, String v) && v.equals(value))
+                        {
+                            if (action != null) action.apply(ctx).accept(t);
+                            cursor.commitPosition();
+                                                        yield true;
+                        }
+                        cursor.jumpBackToMark();
+                                                yield false;
+                    }
+                    case Step.Operator(String value, TokenAction action) -> {
+                        cursor.markPosition();
+                        Token t = cursor.readNextToken();
+                        if (t instanceof Token.Operator(_, String v) && v.equals(value))
+                        {
+                            if (action != null) action.apply(ctx).accept(t);
+                            cursor.commitPosition();
+                                                        yield true;
+                        }
+                        cursor.jumpBackToMark();
+                                                yield false;
+                    }
+                    case Step.Delimiter(String value, TokenAction action) -> {
+                        cursor.markPosition();
+                        Token t = cursor.readNextToken();
+                        if (t instanceof Token.Delimiter(_, String v) && v.equals(value))
+                        {
+                            if (action != null) action.apply(ctx).accept(t);
+                            cursor.commitPosition();
+                                                        yield true;
+                        }
+                        cursor.jumpBackToMark();
+                                                yield false;
+                    }
+                    case Step.Literal(String type, TokenAction action) -> {
+                        cursor.markPosition();
+                        Token t = cursor.readNextToken();
+                        if (t instanceof Token.Literal(_, String tpe, _) && tpe.equals(type))
+                        {
+                            if (action != null) action.apply(ctx).accept(t);
+                            cursor.commitPosition();
+                                                        yield true;
+                        }
+                        cursor.jumpBackToMark();
+                                                yield false;
+                    }
+                    case Step.Identifier(String type, TokenAction action) -> {
+                        cursor.markPosition();
+                        Token t = cursor.readNextToken();
+                        if (t instanceof Token.Identifier(_, String tpe, _) && tpe.equals(type))
+                        {
+                            if (action != null) action.apply(ctx).accept(t);
+                            cursor.commitPosition();
+                                                        yield true;
+                        }
+                        cursor.jumpBackToMark();
+                                                yield false;
+                    }
+                    case Step.Rule(String name, org.nest.ast.functional.ASTNodeConsumer consumer) -> {
+                        Rule ref = ruleTable.get(name);
+                        ParseResponse attempt = parseRule(ref);
+                        if (!(attempt instanceof Success))
+                        {
+                                                        yield false;
+                        }
+
+                        Definition chosen = attempt.definition().orElse(null);
+                        Object child = parseRule(chosen);
+                        if (child == null)
+                        {
+                                                        yield false;
+                        }
+                        if (consumer != null) consumer.apply(ctx).accept(child);
+                                                yield true;
+                    }
+                    case Step.Repeat(List<Step> children, ASTAction initializer) ->
+                    {
+                        Runnable cleanup = initializer != null ? initializer.apply(ctx) : null;
+                        if (cleanup != null) cleanups.push(cleanup);
+
+                        while (true)
+                        {
+                            cursor.markPosition();
+                            int before = cursor.getCurrentPosition();
+                            boolean allPassed = true;
+                            int consumed = 0;
+                            for (Step ch : children)
+                            {
+                                ParseResponse r = parseStep(ch);
+                                if (r instanceof Failure)
+                                {
+                                    allPassed = false;
+                                    break;
+                                }
+
+                                consumed += r.numberOfTokensOfParsed();
+                            }
+
+                            if (!allPassed || consumed == 0)
+                            {
+                                // Nothing matched — rollback and stop repeating
+                                cursor.jumpBackToMark();
+                                break;
+                            }
+
+                            // Re-execute with actions
+                            cursor.jumpBackToMark();
+                            for (Step ch : children)
+                            {
+                                if (!execStep[0].apply(ch))
+                                    // If execution fails (shouldn't), stop repeating
+                                    break;
+                            }
+                        }
+                                                yield true;
+                    }
+                    case Step.Optional(List<Step> children, ASTAction fallback) ->
+                    {
+                        cursor.markPosition();
+                        boolean allPassed = true;
+                        int consumed = 0;
+                        for (Step ch : children)
+                        {
+                            ParseResponse r = parseStep(ch);
+                            if (r instanceof Failure)
+                            {
+                                allPassed = false;
+                                break;
+                            }
+
+                            consumed += r.numberOfTokensOfParsed();
+                        }
+
+                        cursor.jumpBackToMark();
+                        if (allPassed && consumed > 0)
+                        {
+                            for (Step ch : children)
+                                if (!execStep[0].apply(ch))
+                                    yield false;
+                                                        yield true;
+                        }
+                        else
+                        {
+                            // execute fallback
+                            Runnable c = (fallback != null ? fallback.apply(ctx) : null);
+                            if (c != null) cleanups.push(c);
+                                                        yield true; // Optional never fails
+                        }
+                    }
+                    case Step.Choice(Set<List<Step>> alternatives) ->
+                    {
+                        // Try each alternative — choose the first that matches
+                        List<Step> chosen = null;
+                        for (List<Step> alt : alternatives)
+                        {
+                            cursor.markPosition();
+                            boolean allPassed = true;
+                            int consumed = 0;
+                            for (Step ch : alt)
+                            {
+                                ParseResponse r = parseStep(ch);
+                                if (r instanceof Failure)
+                                {
+                                    allPassed = false;
+                                    break;
+                                }
+
+                                consumed += r.numberOfTokensOfParsed();
+                            }
+                            cursor.jumpBackToMark();
+                            if (allPassed && consumed > 0)
+                            {
+                                chosen = alt;
+                                break;
+                            }
+                        }
+
+                        if (chosen == null)
+                        {
+                                                        yield false;
+                        }
+
+                        for (Step ch : chosen)
+                            if (!execStep[0].apply(ch))
+                                yield false;
+                                                yield true;
+                    }
+                };
+            }
+        };
+
+        for (Step step : definition.steps)
+        {
+            if (!execStep[0].apply(step))
+            {
+                                // On unexpected failure during execution, stop and return null
+                // (Errors are handled by higher-level caller on mismatch.)
+                // Clean up any pending initializers
+                while (!cleanups.isEmpty())
+                    try { cleanups.pop().run(); } catch (Exception ignored) {}
+                return null;
+            }
+        }
+
+        
+        try
+        {
+            return definition.builder != null ? definition.builder.apply(ctx).get() : null;
+        }
+        finally
+        {
+            // Run cleanups in LIFO order
+            while (!cleanups.isEmpty())
+                try { cleanups.pop().run(); } catch (Exception ignored) {}
+        }
+    }
+
+    /// Builds a detailed error message to help explain why parsing failed.
+    /// The message includes:
+    /// - The unexpected token value and its type
+    /// - A list of all expected tokens at the failure point
+    /// - Per-rule expectations to give context about what was likely being parsed
+    /// This message is used by the `ErrorManager` to produce developer-friendly feedback.
+    ///
+    /// @param tokenValue          The actual token value encountered.
+    /// @param tokenType           The type of the encountered token.
+    /// @param allExpectedTokens   A list of all tokens that were expected.
+    /// @param ruleToExpectedTokens A mapping from rule names to the tokens they were expecting.
+    /// @return A formatted, multi-line error message.
+    String buildDetailedErrorMessage(String tokenValue, String tokenType,
+                                     List<String> allExpectedTokens,
+                                     Map<String, List<String>> ruleToExpectedTokens)
+    {
+        String preview = tokenValue == null ? "<eof>" : tokenValue;
+        if (preview.length() > MAX_TOKEN_PREVIEW_LENGTH)
+            preview = preview.substring(0, MAX_TOKEN_PREVIEW_LENGTH) + "...";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Unexpected token '").append(preview).append("'");
+        if (tokenType != null && !tokenType.isBlank())
+            sb.append(" (type ").append(tokenType).append(")");
+        sb.append('.').append('\n');
+
+        if (allExpectedTokens != null && !allExpectedTokens.isEmpty())
+        {
+            List<String> uniq = new ArrayList<>(new LinkedHashSet<>(allExpectedTokens));
+            sb.append("Expected one of: ");
+            for (int i = 0; i < uniq.size(); i++)
+            {
+                if (i > 0) sb.append(", ");
+                sb.append(uniq.get(i));
+            }
+            sb.append('\n');
+        }
+
+        if (ruleToExpectedTokens != null && !ruleToExpectedTokens.isEmpty())
+        {
+            sb.append("\nWhere each rule expects:\n");
+            for (Map.Entry<String, List<String>> e : ruleToExpectedTokens.entrySet())
+            {
+                sb.append("  - ").append(e.getKey()).append(": ");
+                List<String> vals = e.getValue() == null ? List.of() : new ArrayList<>(new LinkedHashSet<>(e.getValue()));
+                for (int i = 0; i < vals.size(); i++)
+                {
+                    if (i > 0) sb.append(", ");
+                    sb.append(vals.get(i));
+                }
+                sb.append('\n');
+            }
+        }
+
+        return sb.toString();
+    }
+
+    // =============================
+    // ===== Helper utilities ======
+    // =============================
+
+    private String tokenTypeString(Token t)
+    {
+        if (t == null) return "<eof>";
+        return switch (t)
+        {
+            case Token.Keyword _ -> "keyword";
+            case Token.Operator _ -> "operator";
+            case Token.Delimiter _ -> "delimiter";
+            case Token.Comment _ -> "comment";
+            case Token.NewLine _ -> "newline";
+            case Token.IndentIncr _ -> "indent+";
+            case Token.IndentDecr _ -> "indent-";
+            case Token.Start _ -> "start";
+            case Token.End _ -> "end";
+            case Token.Invalid _ -> "invalid";
+            case Token.Literal(_, String type, _) -> "literal:" + type;
+            case Token.Identifier(_, String type, _) -> "identifier:" + type;
+        };
+    }
+
+    private Set<String> expectedTokensForRule(Rule rule)
+    {
+        return expectedTokensForRule(rule, new HashSet<>());
+    }
+
+    private Set<String> expectedTokensForRule(Rule rule, Set<String> visited)
+    {
+        if (rule == null) return Set.of();
+        if (!visited.add(rule.getName())) return Set.of(); // prevent cycles
+
+        Set<String> out = new LinkedHashSet<>();
+        for (Definition d : rule.getDefinitions())
+            out.addAll(expectedTokensFromSteps(d.steps, visited));
+        return out;
+    }
+
+    private Set<String> expectedTokensFromSteps(List<Step> steps, Set<String> visited)
+    {
+        Set<String> out = new LinkedHashSet<>();
+        for (int i = 0; i < steps.size(); i++)
+        {
+            Step s = steps.get(i);
+            Set<String> part = expectedTokensForStep(s, visited);
+            out.addAll(part);
+
+            // If the step can legally match zero tokens (Optional/Repeat), also include
+            // expectations from the next step to reflect what can come next.
+            if ((s instanceof Step.Optional) || (s instanceof Step.Repeat))
+            {
+                out.addAll(expectedTokensFromSteps(steps.subList(i + 1, steps.size()), visited));
+            }
+
+            // For most steps, the first non-zero-optional step determines the initial expectations
+            if (!(s instanceof Step.Optional) && !(s instanceof Step.Repeat))
+                break;
+        }
+        return out;
+    }
+
+    private Set<String> expectedTokensForStep(Step step, Set<String> visited)
+    {
+        return switch (step)
+        {
+            case Step.Keyword(String value, _) -> Set.of("'" + value + "'");
+            case Step.Operator(String value, _) -> Set.of("operator '" + value + "'");
+            case Step.Delimiter(String value, _) -> Set.of("delimiter '" + value + "'");
+            case Step.Literal(String type, _) -> Set.of("literal:" + type);
+            case Step.Identifier(String type, _) -> Set.of("identifier:" + type);
+            case Step.Rule(String name, _) -> expectedTokensForRule(ruleTable.get(name), visited);
+            case Step.Repeat(java.util.List<Step> children, _) -> expectedTokensFromSteps(children, visited);
+            case Step.Optional(java.util.List<Step> children, _) -> expectedTokensFromSteps(children, visited);
+            case Step.Choice(java.util.Set<java.util.List<Step>> alternatives) -> {
+                Set<String> out = new LinkedHashSet<>();
+                for (java.util.List<Step> alt : alternatives)
+                    out.addAll(expectedTokensFromSteps(alt, visited));
+                yield out;
+            }
+        };
+    }
+
+    /// Constructs an Abstract Syntax Tree (AST) from a stream of tokens using the top-level parsing rules.
+    /// Parsing Strategy:
+    /// 1. Each top-level rule name (from `topRules`) is resolved to its corresponding `Rule` object.
+    /// 2. For each rule, `parseRule(Rule)` is called to try parsing the token stream from the current position.
+    ///    - A `Success` is preferred over a `Failure`.
+    ///    - Among results of the same type, the one that consumes more tokens is considered better.
+    /// 3. If a rule is successfully parsed, its tokens are consumed and the corresponding AST node is built using the rule's `ASTNodeSupplier`.
+    /// 4. This process repeats until the entire token stream is consumed or EOF is reached.
+    ///
+    /// Step Matching:
+    /// - `Keyword`, `Operator`, `Delimiter`: Must exactly match a fixed token value.
+    /// - `Literal`, `Identifier`: Match a specific token type and can trigger a `TokenAction`.
+    /// - `Rule`: Parses another named rule and passes the result to an `ASTNodeConsumer`.
+    /// - `Repeat`: Matches the internal steps as many times as possible (greedy), collecting multiple results.
+    /// - `Optional`: Tries once; if it fails, the parse still succeeds and a fallback action is triggered.
+    /// - `Choice`: Attempts multiple alternatives in order and uses the first successful match (like a mini rule).
+    /// Rule Completion:
+    /// After all steps in a definition are matched, the rule's `ASTNodeSupplier` is invoked with the current `ASTBuildContext`
+    /// to produce the resulting AST node.
+    /// Failure Handling:
+    /// Even if `parseRule(Definition)` returns `null`, an error has already been reported via the `ErrorManager`,
+    /// and a placeholder or partial structure will still be recorded in the AST. This guarantees that something is always added to the AST
+    /// for every top-level rule attempt, allowing the rest of the pipeline (e.g., type checking or code generation) to proceed without interruption.
+    /// Any parse errors are logged through the `ErrorManager`, including contextual info about expected tokens and rule progress.
+    ///
+    /// @param tokens The list of input tokens to parse.
+    /// @param errors The error manager for logging parse failures and diagnostics.
+    /// @return The resulting `ASTWrapper` representing the full parsed tree.
+    public ASTWrapper createAST(TokenList tokens, ErrorManager errors)
+    {
+        this.tokenList   = Objects.requireNonNull(tokens);
+        this.errorManager = Objects.requireNonNull(errors);
+        this.cursor      = TokenCursor.wrap(tokenList, ignoreComments);
+
+        List<Object> astNodes = new ArrayList<>();
+
+                int iteration = 0;
+
+        while (!cursor.isAtEnd())
+        {
+            iteration++;
+            int positionBefore = cursor.getCurrentPosition();
+            Token currentToken = cursor.peek();
+                        
+            ParseResponse response = new Failure(0, Optional.empty());
+
+            for (String ruleName : topRuleNames)
+            {
+                ParseResponse result = parseRule(ruleTable.get(ruleName));
+                if (result.isBetterThan(response))
+                    response = result;
+            }
+
+            if (response instanceof Success)
+            {
+                                // Execute the chosen definition to build the AST node and advance the cursor
+                Object node = parseRule(response.definition().orElse(null));
+                astNodes.add(node);
+                int positionAfter = cursor.getCurrentPosition();
+                            }
+            else
+            {
+                                // Failure: produce a helpful error, consume one token to make progress
+                int failOffset = response.numberOfTokensOfParsed();
+                Token offending = cursor.peek(Math.max(0, failOffset));
+
+                // Treat End token as EOF for error reporting
+                boolean isEndToken = offending instanceof Token.End;
+                String tokenVal = (offending != null && !isEndToken) ? offending.getValue() : "<eof>";
+                String tokenTyp = tokenTypeString(offending);
+
+                // Aggregate expectations per top-level rule
+                Map<String, List<String>> perRule = new LinkedHashMap<>();
+                Set<String> all = new LinkedHashSet<>();
+                for (String ruleName : topRuleNames)
+                {
+                    Rule r = ruleTable.get(ruleName);
+                    List<String> vals = new ArrayList<>(expectedTokensForRule(r));
+                    perRule.put(ruleName, vals);
+                    all.addAll(vals);
+                }
+
+                String message = buildDetailedErrorMessage(tokenVal, tokenTyp, new ArrayList<>(all), perRule);
+
+                // Use the offending token position if available
+                // For EOF, use the position after the last real token
+                Coordinates pos;
+                if (offending != null) {
+                    pos = offending.position();
+                } else {
+                    // EOF: try to get position from the last token before EOF
+                    Token lastToken = cursor.peek(-1);
+                    if (lastToken != null && !(lastToken instanceof Token.End)) {
+                        Coordinates lastPos = lastToken.position();
+                        // Position after the last token
+                        pos = new Coordinates(lastPos.line(), lastPos.column() + lastToken.getValue().length());
+                    } else {
+                        // Fallback: use line count from source
+                        int lastLine = tokenList.size() > 0 ? tokenList.get(tokenList.size() - 1).position().line() : 1;
+                        pos = new Coordinates(lastLine, 1);
+                    }
+                }
+                
+                String hint = response.definition().map(d -> d.hint).orElse("");
+                errorManager.error(message, pos.line(), pos.column(), tokenVal, hint);
+
+                // Consume one token to avoid infinite loop and continue
+                Token consumed = cursor.readNextToken();
+                                astNodes.add(null);
+            }
+
+            // Safety check for infinite loop
+            int positionAfterIteration = cursor.getCurrentPosition();
+            if (positionAfterIteration == positionBefore)
+            {
+                                                break;
+            }
+        }
+
+        
+        return new ASTWrapper(astNodes, errorManager);
     }
 }

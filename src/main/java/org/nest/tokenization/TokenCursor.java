@@ -22,7 +22,7 @@ public class TokenCursor
     {
         this.tokens = tokens;
         this.ignoreComments = ignoreComments;
-        this.currentPosition = 1;
+        this.currentPosition = 1; // Because of
         this.savedPositions = new ArrayDeque<>();
 
         // If ignoreComments is true, skip any comments at the beginning
@@ -97,6 +97,18 @@ public class TokenCursor
         return token;
     }
 
+    /// Marks the current position to allow backtracking later.
+    public void markPosition()
+    {
+        savePosition();
+    }
+
+    /// Reads (consumes) the next token from the stream, respecting comment skipping settings.
+    public Token readNextToken()
+    {
+        return consume();
+    }
+
     /// Saves the current position for later backtracking.
     /// Multiple positions can be saved in a stack-like manner.
     ///
@@ -122,6 +134,12 @@ public class TokenCursor
         return currentPosition;
     }
 
+    /// Jumps back to the most recently marked position.
+    public void jumpBackToMark()
+    {
+        backtrack();
+    }
+
     /// Discards the most recently saved position without backtracking.
     /// This is typically used when a speculative parse has succeeded and
     /// the saved position is no longer needed.
@@ -139,6 +157,12 @@ public class TokenCursor
     public int getPosition()
     {
         return currentPosition;
+    }
+
+    /// Returns the current cursor position (alias for getPosition()).
+    public int getCurrentPosition()
+    {
+        return getPosition();
     }
 
     /// Sets the cursor to a specific position in the token list.
@@ -208,5 +232,11 @@ public class TokenCursor
     public boolean isAtEnd()
     {
         return currentPosition >= tokens.size() - 1;
+    }
+
+    /// Factory helper used by parsers to create a cursor for a token list.
+    public static TokenCursor wrap(TokenList tokens, boolean ignoreComments)
+    {
+        return new TokenCursor(tokens, ignoreComments);
     }
 }

@@ -6,7 +6,9 @@ import org.nest.ast.functional.TokenAction;
 import org.nest.ast.state.Step;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /// Template for defining a choice between alternative steps in an AST rule.
 /// The Choice template allows defining multiple alternative paths, where the first matching path is chosen.
@@ -17,13 +19,13 @@ public class ASTDefinitionTemplateChoice<C extends ASTDefinitionStepTemplate<C>,
     implements ASTDefinitionStepTemplate<ASTDefinitionTemplateChoice<C, P>>
 {
     P parent;
-    List<List<Step>> alternatives;
+    Set<List<Step>> alternatives;
     List<Step> currentAlternative;
 
     ASTDefinitionTemplateChoice(P parent)
     {
         this.parent = parent;
-        this.alternatives = new ArrayList<>();
+        this.alternatives = new LinkedHashSet<>();
         this.currentAlternative = new ArrayList<>();
         this.alternatives.add(this.currentAlternative);
     }
