@@ -11,7 +11,7 @@ import org.nest.ast.state.Step;
  * A standalone version of ASTDefinitionTemplate that can be used to build a Definition
  * outside of the normal rule building pipeline.
  */
-public class StandaloneDefinitionTemplate implements ASTDefinitionStepTemplate<StandaloneDefinitionTemplate>
+public final class StandaloneDefinitionTemplate implements ASTDefinitionStepTemplate<StandaloneDefinitionTemplate>
 {
     /** The definition being built. */
     private final Definition definition;

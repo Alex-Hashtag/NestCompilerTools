@@ -12,7 +12,7 @@ import java.util.List;
 ///
 /// @param <R> The type parameter for this repeat template (self-type)
 /// @param <P> The type of the parent template
-public class ASTDefinitionTemplateRepeat<R extends ASTDefinitionStepTemplate<R>, P extends ASTDefinitionStepTemplate<P>>
+public final class ASTDefinitionTemplateRepeat<R extends ASTDefinitionStepTemplate<R>, P extends ASTDefinitionStepTemplate<P>>
     implements ASTDefinitionStepTemplate<ASTDefinitionTemplateRepeat<R, P>>
 {
     P parent;

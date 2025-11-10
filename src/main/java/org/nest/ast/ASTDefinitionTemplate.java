@@ -10,7 +10,7 @@ import org.nest.ast.state.Step;
 /// ASTDefinitionTemplate is a template class used to define a definition in the Abstract Syntax Tree (AST).
 /// It provides methods to add steps to the definition, such as keywords, operators, delimiters, identifiers, literals, and rules.
 /// It also provides methods to create nested template constructs, such as repeats, optionals, and choices.
-public class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<ASTDefinitionTemplate>
+public final class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<ASTDefinitionTemplate>
 {
     /// The ASTRuleTemplate that this definition belongs to.
     ASTRuleTemplate astRuleTemplateCaller;

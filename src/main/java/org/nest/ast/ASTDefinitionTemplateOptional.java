@@ -12,7 +12,7 @@ import java.util.List;
 ///
 /// @param <O> The type parameter for this optional template (self-type)
 /// @param <P> The type of the parent template
-public class ASTDefinitionTemplateOptional<O extends ASTDefinitionStepTemplate<O>, P extends ASTDefinitionStepTemplate<P>>
+public final class ASTDefinitionTemplateOptional<O extends ASTDefinitionStepTemplate<O>, P extends ASTDefinitionStepTemplate<P>>
     implements ASTDefinitionStepTemplate<ASTDefinitionTemplateOptional<O, P>>
 {
     P parent;

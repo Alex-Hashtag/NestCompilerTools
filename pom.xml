@@ -6,7 +6,7 @@
 
     <groupId>org.nest</groupId>
     <artifactId>NestCompilerTools</artifactId>
-    <version>0.2.0</version>
+    <version>0.5.0</version>
 
     <properties>
         <maven.compiler.source>24</maven.compiler.source>

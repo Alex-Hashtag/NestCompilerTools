@@ -2,6 +2,7 @@ package org.nest.ast;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -9,6 +10,7 @@ import java.util.stream.Collectors;
 public class ASTBuildContext
 {
     HashMap<String, Object> context = new HashMap<>();
+
 
     public <T> Runnable put(String key, T value)
     {

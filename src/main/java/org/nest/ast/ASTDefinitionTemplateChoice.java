@@ -15,7 +15,7 @@ import java.util.Set;
 ///
 /// @param <C> The type parameter for this choice template (self-type)
 /// @param <P> The type of the parent template
-public class ASTDefinitionTemplateChoice<C extends ASTDefinitionStepTemplate<C>, P extends ASTDefinitionStepTemplate<P>>
+public final class ASTDefinitionTemplateChoice<C extends ASTDefinitionStepTemplate<C>, P extends ASTDefinitionStepTemplate<P>>
     implements ASTDefinitionStepTemplate<ASTDefinitionTemplateChoice<C, P>>
 {
     P parent;

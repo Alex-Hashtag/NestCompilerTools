@@ -10,7 +10,8 @@ import org.nest.ast.functional.TokenAction;
 /// while maintaining the fluent API style.
 ///
 /// @param <T> The implementing type for method chaining
-public interface ASTDefinitionStepTemplate<T extends ASTDefinitionStepTemplate<T>> {
+public sealed interface ASTDefinitionStepTemplate<T extends ASTDefinitionStepTemplate<T>> permits ASTDefinitionTemplate, ASTDefinitionTemplateChoice, ASTDefinitionTemplateOptional, ASTDefinitionTemplateRepeat, StandaloneDefinitionTemplate
+{
     
     /// Adds a keyword step to this template.
     ///
