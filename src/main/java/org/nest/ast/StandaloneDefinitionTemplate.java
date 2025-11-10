@@ -7,13 +7,16 @@ import org.nest.ast.functional.TokenAction;
 import org.nest.ast.state.Definition;
 import org.nest.ast.state.Step;
 
+
 /**
  * A standalone version of ASTDefinitionTemplate that can be used to build a Definition
  * outside of the normal rule building pipeline.
  */
 public final class StandaloneDefinitionTemplate implements ASTDefinitionStepTemplate<StandaloneDefinitionTemplate>
 {
-    /** The definition being built. */
+    /**
+     * The definition being built.
+     */
     private final Definition definition;
 
     /**
@@ -29,7 +32,7 @@ public final class StandaloneDefinitionTemplate implements ASTDefinitionStepTemp
     /**
      * Adds a keyword step to the definition.
      *
-     * @param value The value of the keyword.
+     * @param value  The value of the keyword.
      * @param action The action to perform when the keyword is encountered.
      * @return This StandaloneDefinitionTemplate.
      */
@@ -43,7 +46,7 @@ public final class StandaloneDefinitionTemplate implements ASTDefinitionStepTemp
     /**
      * Adds an operator step to the definition.
      *
-     * @param value The value of the operator.
+     * @param value  The value of the operator.
      * @param action The action to perform when the operator is encountered.
      * @return This StandaloneDefinitionTemplate.
      */
@@ -57,7 +60,7 @@ public final class StandaloneDefinitionTemplate implements ASTDefinitionStepTemp
     /**
      * Adds a delimiter step to the definition.
      *
-     * @param value The value of the delimiter.
+     * @param value  The value of the delimiter.
      * @param action The action to perform when the delimiter is encountered.
      * @return This StandaloneDefinitionTemplate.
      */
@@ -71,7 +74,7 @@ public final class StandaloneDefinitionTemplate implements ASTDefinitionStepTemp
     /**
      * Adds an identifier step to the definition.
      *
-     * @param type The type of the identifier.
+     * @param type   The type of the identifier.
      * @param action The action to perform when the identifier is encountered.
      * @return This StandaloneDefinitionTemplate.
      */
@@ -85,7 +88,7 @@ public final class StandaloneDefinitionTemplate implements ASTDefinitionStepTemp
     /**
      * Adds a literal step to the definition.
      *
-     * @param type The type of the literal.
+     * @param type   The type of the literal.
      * @param action The action to perform when the literal is encountered.
      * @return This StandaloneDefinitionTemplate.
      */
@@ -132,7 +135,7 @@ public final class StandaloneDefinitionTemplate implements ASTDefinitionStepTemp
     {
         return new ASTDefinitionTemplateOptional<>(this);
     }
-    
+
     /**
      * Creates a new choice template construct.
      *
@@ -160,7 +163,7 @@ public final class StandaloneDefinitionTemplate implements ASTDefinitionStepTemp
      * Builds and returns the definition with a custom error hint.
      *
      * @param supplier The supplier to use when the definition is encountered.
-     * @param hint A custom hint to display when parsing fails for this definition.
+     * @param hint     A custom hint to display when parsing fails for this definition.
      * @return The built Definition object.
      */
     public Definition buildDefinition(ASTNodeSupplier supplier, String hint)

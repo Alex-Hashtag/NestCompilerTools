@@ -10,7 +10,8 @@ import org.bytedeco.llvm.global.LLVM;
 import org.nest.ast.generation.llvm.types.Type;
 
 
-public class Function {
+public class Function
+{
     private final LLVMValueRef ref;
     private final LLVMContextRef ctx;
 
@@ -36,25 +37,32 @@ public class Function {
     }
 
     /*──────── Query & helpers ───*/
-    public Value getArgument(int index) {
+    public Value getArgument(int index)
+    {
         return new Value(LLVM.LLVMGetParam(ref, index));
     }
 
-    public BasicBlock getEntryBlock() {
+    public BasicBlock getEntryBlock()
+    {
         return new BasicBlock(LLVM.LLVMGetEntryBasicBlock(ref));
     }
 
-    public BasicBlock createBlock(String name) {
+    public BasicBlock createBlock(String name)
+    {
         return new BasicBlock(
                 LLVM.LLVMAppendBasicBlockInContext(ctx, ref, name)
         );
     }
 
-    public IRBuilder getEntryBuilder() {
+    public IRBuilder getEntryBuilder()
+    {
         IRBuilder b = new IRBuilder(ctx);
         b.moveToBlock(getEntryBlock());
         return b;
     }
 
-    public LLVMValueRef getRef() { return ref; }
+    public LLVMValueRef getRef()
+    {
+        return ref;
+    }
 }

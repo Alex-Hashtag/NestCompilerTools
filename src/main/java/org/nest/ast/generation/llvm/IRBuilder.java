@@ -2,170 +2,211 @@ package org.nest.ast.generation.llvm;
 
 
 import org.bytedeco.javacpp.PointerPointer;
-import org.bytedeco.llvm.LLVM.*;
+import org.bytedeco.llvm.LLVM.LLVMBasicBlockRef;
+import org.bytedeco.llvm.LLVM.LLVMBuilderRef;
+import org.bytedeco.llvm.LLVM.LLVMContextRef;
+import org.bytedeco.llvm.LLVM.LLVMValueRef;
 import org.nest.ast.generation.llvm.types.Type;
 
 import static org.bytedeco.llvm.global.LLVM.*;
 
-public class IRBuilder {
+
+public class IRBuilder
+{
     private final LLVMBuilderRef builder;
 
-    IRBuilder(LLVMContextRef ctx) {
+    IRBuilder(LLVMContextRef ctx)
+    {
         builder = LLVMCreateBuilderInContext(ctx);
     }
 
     /*──────── Positioning ───────*/
-    public void moveToBlock(BasicBlock block) {
+    public void moveToBlock(BasicBlock block)
+    {
         LLVMPositionBuilderAtEnd(builder, block.getRef());
     }
 
-    public void moveToNextBlock() {
+    public void moveToNextBlock()
+    {
         LLVMPositionBuilderAtEnd(builder, LLVMGetInsertBlock(builder));
     }
+
     /*──────── Constants ─────────*/
-    public Value constantInt(Type type, long value) {
+    public Value constantInt(Type type, long value)
+    {
         return new Value(LLVMConstInt(type.getRef(), value, 0));
     }
 
-    public Value constantFloat(Type type, double value) {
+    public Value constantFloat(Type type, double value)
+    {
         return new Value(LLVMConstReal(type.getRef(), value));
     }
 
-    public Value constantNull(Type type) {
+    public Value constantNull(Type type)
+    {
         return new Value(LLVMConstNull(type.getRef()));
     }
 
-    public Value constantBool(Type type, boolean value) {
+    public Value constantBool(Type type, boolean value)
+    {
         return new Value(LLVMConstInt(type.getRef(), value ? 1 : 0, 0));
     }
 
-    public Value constantString(Type type, String value) {
+    public Value constantString(Type type, String value)
+    {
         return new Value(LLVMConstStringInContext(LLVMGetGlobalContext(), value, value.length(), 0));
     }
 
 
     /*──────── Memory ops ────────*/
-    public Value allocateStack(Type type, String name) {
+    public Value allocateStack(Type type, String name)
+    {
         return new Value(LLVMBuildAlloca(builder, type.getRef(), name));
     }
 
-    public Value loadValue(Type type, Value ptr, String name) {
-        return new Value(LLVMBuildLoad2(builder, type.getRef(), ptr.getRef(), name));
-    }
-    public Value storeValue(Value value, Value ptr) {
-        return new Value(LLVMBuildStore(builder, value.getRef(), ptr.getRef()));
+    public Value loadValue(Type type, Value ptr, String name)
+    {
+        return new Value(LLVMBuildLoad2(builder, type.getRef(), ptr.ref(), name));
     }
 
+    public Value storeValue(Value value, Value ptr)
+    {
+        return new Value(LLVMBuildStore(builder, value.ref(), ptr.ref()));
+    }
 
 
     /*──────── Arithmetic ────────*/
-    public Value addValues(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildAdd(builder, lhs.getRef(), rhs.getRef(), name));
+    public Value addValues(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildAdd(builder, lhs.ref(), rhs.ref(), name));
     }
 
-    public Value subtractValues(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildSub(builder, lhs.getRef(), rhs.getRef(), name));
+    public Value subtractValues(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildSub(builder, lhs.ref(), rhs.ref(), name));
     }
 
-    public Value multiplyValues(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildMul(builder, lhs.getRef(), rhs.getRef(), name));
+    public Value multiplyValues(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildMul(builder, lhs.ref(), rhs.ref(), name));
     }
 
     // Integer division
-    public Value divideValues(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildSDiv(builder, lhs.getRef(), rhs.getRef(), name));
+    public Value divideValues(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildSDiv(builder, lhs.ref(), rhs.ref(), name));
     }
 
     // Bitwise AND
-    public Value andValues(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildAnd(builder, lhs.getRef(), rhs.getRef(), name));
+    public Value andValues(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildAnd(builder, lhs.ref(), rhs.ref(), name));
     }
 
     // Bitwise OR
-    public Value orValues(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildOr(builder, lhs.getRef(), rhs.getRef(), name));
+    public Value orValues(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildOr(builder, lhs.ref(), rhs.ref(), name));
     }
 
     // Bitwise XOR
-    public Value xorValues(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildXor(builder, lhs.getRef(), rhs.getRef(), name));
+    public Value xorValues(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildXor(builder, lhs.ref(), rhs.ref(), name));
     }
 
     /*──────── Comparisons ───────*/
-    public Value compareGreaterThan(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildICmp(builder, LLVMIntSGT, lhs.getRef(), rhs.getRef(), name)
+    public Value compareGreaterThan(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildICmp(builder, LLVMIntSGT, lhs.ref(), rhs.ref(), name)
         );
     }
 
-    public Value compareEqual(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildICmp(builder, LLVMIntEQ, lhs.getRef(), rhs.getRef(), name));
+    public Value compareEqual(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildICmp(builder, LLVMIntEQ, lhs.ref(), rhs.ref(), name));
     }
 
-    public Value compareNotEqual(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildICmp(builder, LLVMIntNE, lhs.getRef(), rhs.getRef(), name));
+    public Value compareNotEqual(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildICmp(builder, LLVMIntNE, lhs.ref(), rhs.ref(), name));
     }
 
-    public Value compareLessThan(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildICmp(builder, LLVMIntSLT, lhs.getRef(), rhs.getRef(), name));
+    public Value compareLessThan(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildICmp(builder, LLVMIntSLT, lhs.ref(), rhs.ref(), name));
     }
 
-    public Value compareLessOrEqual(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildICmp(builder, LLVMIntSLE, lhs.getRef(), rhs.getRef(), name));
+    public Value compareLessOrEqual(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildICmp(builder, LLVMIntSLE, lhs.ref(), rhs.ref(), name));
     }
 
-    public Value compareGreaterOrEqual(Value lhs, Value rhs, String name) {
-        return new Value(LLVMBuildICmp(builder, LLVMIntSGE, lhs.getRef(), rhs.getRef(), name));
+    public Value compareGreaterOrEqual(Value lhs, Value rhs, String name)
+    {
+        return new Value(LLVMBuildICmp(builder, LLVMIntSGE, lhs.ref(), rhs.ref(), name));
     }
 
-    public Value notValue(Value value, String name) {
-        return new Value(LLVMBuildNot(builder, value.getRef(), name));
+    public Value notValue(Value value, String name)
+    {
+        return new Value(LLVMBuildNot(builder, value.ref(), name));
     }
 
-    public Value zeroExtend(Value value, Type targetType, String name) {
-        return new Value(LLVMBuildZExt(builder, value.getRef(), targetType.getRef(), name));
+    public Value zeroExtend(Value value, Type targetType, String name)
+    {
+        return new Value(LLVMBuildZExt(builder, value.ref(), targetType.getRef(), name));
     }
 
-    public Value signExtend(Value value, Type targetType, String name) {
-        return new Value(LLVMBuildSExt(builder, value.getRef(), targetType.getRef(), name));
+    public Value signExtend(Value value, Type targetType, String name)
+    {
+        return new Value(LLVMBuildSExt(builder, value.ref(), targetType.getRef(), name));
     }
 
-    public Value truncate(Value value, Type targetType, String name) {
-        return new Value(LLVMBuildTrunc(builder, value.getRef(), targetType.getRef(), name));
+    public Value truncate(Value value, Type targetType, String name)
+    {
+        return new Value(LLVMBuildTrunc(builder, value.ref(), targetType.getRef(), name));
     }
 
 
     /*──────── Control flow ──────*/
     public void branchConditional(Value condition,
                                   BasicBlock thenBlock,
-                                  BasicBlock elseBlock) {
-        LLVMBuildCondBr(builder, condition.getRef(),
+                                  BasicBlock elseBlock)
+    {
+        LLVMBuildCondBr(builder, condition.ref(),
                 thenBlock.getRef(), elseBlock.getRef());
     }
 
-    public void jumpToBlock(BasicBlock target) {
+    public void jumpToBlock(BasicBlock target)
+    {
         LLVMBuildBr(builder, target.getRef());
     }
 
-    public void returnValue(Value value) {
-        LLVMBuildRet(builder, value.getRef());
+    public void returnValue(Value value)
+    {
+        LLVMBuildRet(builder, value.ref());
     }
 
-    public void returnVoid() {
+    public void returnVoid()
+    {
         LLVMBuildRetVoid(builder);
     }
 
-    public void unreachable() {
+    public void unreachable()
+    {
         LLVMBuildUnreachable(builder);
     }
 
-    public Value callFunction(Value function, Value[] args, String name) {
+    public Value callFunction(Value function, Value[] args, String name)
+    {
         PointerPointer<LLVMValueRef> argsPointer = new PointerPointer<>(args.length);
-        for (int i = 0; i < args.length; i++) {
-            argsPointer.put(i, args[i].getRef());
+        for (int i = 0; i < args.length; i++)
+        {
+            argsPointer.put(i, args[i].ref());
         }
         return new Value(LLVMBuildCall2(builder,
-                LLVMGetElementType(LLVMTypeOf(function.getRef())), // function type
-                function.getRef(),
+                LLVMGetElementType(LLVMTypeOf(function.ref())), // function type
+                function.ref(),
                 argsPointer,
                 args.length,
                 name));
@@ -173,11 +214,12 @@ public class IRBuilder {
 
 
     /*──────── Struct helpers ────*/
-    public Value getStructFieldPointer(Value structPtr, int index, String name) {
+    public Value getStructFieldPointer(Value structPtr, int index, String name)
+    {
         LLVMValueRef gep = LLVMBuildStructGEP2(
                 builder,
-                LLVMTypeOf(structPtr.getRef()),
-                structPtr.getRef(),
+                LLVMTypeOf(structPtr.ref()),
+                structPtr.ref(),
                 index,
                 name
         );
@@ -188,21 +230,26 @@ public class IRBuilder {
     public Value selectFromBranches(Type type,
                                     Value[] incomingValues,
                                     BasicBlock[] incomingBlocks,
-                                    String name) {
+                                    String name)
+    {
         LLVMValueRef phi = LLVMBuildPhi(builder, type.getRef(), name);
         PointerPointer<LLVMBasicBlockRef> blocks =
                 new PointerPointer<>(incomingBlocks.length);
         PointerPointer<LLVMValueRef> values =
                 new PointerPointer<>(incomingValues.length);
 
-        for (int i = 0; i < incomingBlocks.length; i++) {
+        for (int i = 0; i < incomingBlocks.length; i++)
+        {
             blocks.put(i, incomingBlocks[i].getRef());
-            values.put(i, incomingValues[i].getRef());
+            values.put(i, incomingValues[i].ref());
         }
         LLVMAddIncoming(phi, values, blocks, incomingBlocks.length);
         return new Value(phi);
     }
 
     /*──────── Cleanup ───────────*/
-    public void dispose() { LLVMDisposeBuilder(builder); }
+    public void dispose()
+    {
+        LLVMDisposeBuilder(builder);
+    }
 }

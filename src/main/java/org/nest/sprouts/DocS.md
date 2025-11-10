@@ -5,9 +5,8 @@
 ## Character set
 
 - Source is UTF-8; identifiers use ASCII letters, digits, and `_`.
-    
+
 - Lines end with `\n` or `\r\n`.
-    
 
 ## Tokens (with regex-like rules)
 
@@ -16,47 +15,41 @@ Order matters; match the **longest** token, then the **first** rule.
 **Whitespace & comments (skip)**
 
 - `WS` : `[ \t\r\n]+`
-    
+
 - `LINE_COMMENT` : `//[^\r\n]*`
-    
 
 **Literals**
 
 - `INT` : `0|[1-9][0-9]*`  
-    Parse as signed 32-bit (`i32`). Reject on overflow during parsing or defer to sema.
-    
+  Parse as signed 32-bit (`i32`). Reject on overflow during parsing or defer to sema.
 
 **Identifiers & keywords**
 
 - `IDENT` : `[A-Za-z_][A-Za-z0-9_]*`
-    
+
 - The following are **reserved keywords** (emit dedicated token kinds, not IDENT):
-    
+
     - `let`, `set`, `if`, `else`, `while`, `print`, `exit`
-        
 
 **Punctuation**
 
 - `(` `)` `{` `}` `;` `=`
-    
 
 **Operators**
 
 - Two-char: `==` `!=` `<=` `>=` `&&` `||`
-    
+
 - One-char: `+ - * / % < > !`
-    
 
 ### Lexing notes
 
 - No string/char literals.
-    
+
 - No numeric separators, hex, or unary `+`.
-    
+
 - Track `line:column` for diagnostics per token.
-    
+
 - Produce an EOF token at the end.
-    
 
 ---
 
@@ -95,19 +88,18 @@ primary      := INT | IDENT | "(" expr ")" ;
 **Associativity & precedence (high → low):**
 
 1. Unary: `- !` (right-assoc)
-    
+
 2. `* / %`
-    
+
 3. `+ -`
-    
+
 4. `< <= > >=`
-    
+
 5. `== !=`
-    
+
 6. `&&`
-    
+
 7. `||` (all binary ops left-assoc)
-    
 
 Parsing strategy: recursive-descent or Pratt for `expr`.
 
@@ -118,55 +110,51 @@ Parsing strategy: recursive-descent or Pratt for `expr`.
 ## Types
 
 - Single type: `i32` (signed 32-bit).
-    
+
 - Truthiness: `0` = false; nonzero = true. `!x` returns `0|1`.
-    
 
 ## Scopes & symbols
 
 - Each `{ ... }` introduces a new scope.
-    
+
 - `let` declares a mutable variable in the current scope.
-    
+
 - Shadowing is allowed (inner `let x` hides outer `x` until block end).
-    
+
 - **Use-before-def** is an error (check at resolve time).
-    
+
 - `set name = expr;` must find a variable in any enclosing scope; assigns to nearest binding.
-    
 
 ## Operator typing/behavior (all on `i32`)
 
 - Arithmetic: `+ - * / %` → `i32`.
-    
+
     - Division: truncates toward **zero** (C/LLVM semantics).
-        
+
     - Modulo: same sign as dividend (`a % b == a - (a / b) * b` with truncating div).
-        
+
     - **Division/mod by zero**: runtime error (diagnose at runtime; optional static warn if divisor is constant zero).
-        
+
 - Comparisons & equality: return `0` or `1`.
-    
+
 - Logical: `&&` / `||` short-circuit; return `0` or `1`.
-    
+
 - Unary `-` : arithmetic negation (wraps on overflow if you use twos-complement).
-    
+
 - Unary `!` : `x == 0 ? 1 : 0`.
-    
 
 ## Program termination
 
-- `exit expr;` immediately stops execution with **process exit code** = `expr` (masked to `0..255` if you map to OS, or keep full `i32` in a VM).
-    
+- `exit expr;` immediately stops execution with **process exit code** = `expr` (masked to `0..255` if you map to OS, or
+  keep full `i32` in a VM).
+
 - If no `exit` executed: exit code `0`.
-    
 
 ## Constant folding (recommended)
 
 - Fold any pure subexpressions of literals (respect overflow rules of target).
-    
+
 - Do **not** fold `&&`/`||` in a way that would evaluate short-circuited operands.
-    
 
 ---
 
@@ -203,15 +191,14 @@ Attach `span` (start..end) to all nodes for diagnostics and later tools.
 # 5) Diagnostics (examples)
 
 - **Lex**: `unexpected character '@' at line 3, col 12`
-    
+
 - **Parse**: `expected ';' after expression, found '}' at line 7, col 3`
-    
+
 - **Resolve**: `use of undeclared variable 'i' at line 5, col 8`
-    
+
 - **Assign**: `cannot set undeclared variable 'x' (did you mean 'let'?)`
-    
+
 - **Runtime**: `division by zero at line 9, col 17` (include node span)
-    
 
 ---
 
@@ -222,15 +209,15 @@ Implement either:
 ## A) LLVM lowering (sketch)
 
 - **Module** has one function: `main()` → `i32`.
-    
+
 - Maintain an **SSA value** (alloca) map for variables (reassigned via `store`).
-    
+
 - `print e;` → call `printf("%d\n", e)` or a custom `void sprout_print(i32)`.
-    
+
 - Short-circuit:
-    
+
     - For `a && b`:
-        
+
         ```
         aBlock:   %a = eval(a)
                   %a_is_true = icmp ne i32 %a, 0
@@ -240,35 +227,33 @@ Implement either:
                   br label %end
         end:      %phi = phi i32 [0, %aBlock], [%b_bool_zext, %bBlock]
         ```
-        
+
     - For `a || b`: same, but if `a_is_true` → result `1`.
-        
+
 - `while (cond) { body }`:
-    
+
     ```
     br cond
     cond:  %c = eval(cond)!=0; br i1 %c, body, end
     body:  ...; br cond
     end:   ...
     ```
-    
+
 - `exit e;`:
-    
+
     - Option 1: direct `call void exit(i32 e)` then `unreachable`.
-        
+
     - Option 2: store in a dedicated `ret_slot`, `br epilogue`; in epilogue `ret i32 ret_slot`.
-        
 
 ## B) Tiny stack VM (bytecode)
 
 ### Registers/stack
 
 - Value stack of `i32`.
-    
+
 - Environment: vector of **frames**; each frame has a map from symbol id → slot index.
-    
+
 - Program is a flat bytecode; blocks compile to labels.
-    
 
 ### Instructions (minimal)
 
@@ -290,7 +275,7 @@ EXIT                     ; pop, terminate VM with code
 **Short-circuit** by codegen:
 
 - `a && b`:
-    
+
     ```
     ... code(a) ...
     DUP
@@ -300,7 +285,6 @@ EXIT                     ; pop, terminate VM with code
     NEZ                 ; (emit EQ/NE against 0)
     JMP L_end
     ```
-    
 
 L_false:  
 POP  
@@ -456,14 +440,13 @@ IDENT "x"
 INT "2"
 
 - "+"  
-    INT "3"
-    
+  INT "3"
+
 
 - "*"  
-    INT "4"  
-    ; ";"  
-    EOF
-    
+  INT "4"  
+  ; ";"  
+  EOF
 
 ```
 

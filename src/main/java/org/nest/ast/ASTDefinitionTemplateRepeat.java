@@ -8,12 +8,13 @@ import org.nest.ast.state.Step;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /// Template for defining a repeated sequence of steps in an AST rule.
 ///
 /// @param <R> The type parameter for this repeat template (self-type)
 /// @param <P> The type of the parent template
 public final class ASTDefinitionTemplateRepeat<R extends ASTDefinitionStepTemplate<R>, P extends ASTDefinitionStepTemplate<P>>
-    implements ASTDefinitionStepTemplate<ASTDefinitionTemplateRepeat<R, P>>
+        implements ASTDefinitionStepTemplate<ASTDefinitionTemplateRepeat<R, P>>
 {
     P parent;
 

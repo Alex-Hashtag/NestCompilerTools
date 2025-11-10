@@ -7,6 +7,7 @@ import org.nest.ast.functional.TokenAction;
 import org.nest.ast.state.Definition;
 import org.nest.ast.state.Step;
 
+
 /// ASTDefinitionTemplate is a template class used to define a definition in the Abstract Syntax Tree (AST).
 /// It provides methods to add steps to the definition, such as keywords, operators, delimiters, identifiers, literals, and rules.
 /// It also provides methods to create nested template constructs, such as repeats, optionals, and choices.
@@ -20,7 +21,7 @@ public final class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<AS
 
     /// Constructs a new ASTDefinitionTemplate with the given name and ASTRuleTemplate.
     ///
-    /// @param name The name of the definition.
+    /// @param name            The name of the definition.
     /// @param astRuleTemplate The ASTRuleTemplate that this definition belongs to.
     ASTDefinitionTemplate(String name, ASTRuleTemplate astRuleTemplate)
     {
@@ -30,7 +31,7 @@ public final class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<AS
 
     /// Adds a keyword step to the definition.
     ///
-    /// @param value The value of the keyword.
+    /// @param value  The value of the keyword.
     /// @param action The action to perform when the keyword is encountered.
     /// @return This ASTDefinitionTemplate.
     @Override
@@ -42,7 +43,7 @@ public final class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<AS
 
     /// Adds an operator step to the definition.
     ///
-    /// @param value The value of the operator.
+    /// @param value  The value of the operator.
     /// @param action The action to perform when the operator is encountered.
     /// @return This ASTDefinitionTemplate.
     @Override
@@ -54,7 +55,7 @@ public final class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<AS
 
     /// Adds a delimiter step to the definition.
     ///
-    /// @param value The value of the delimiter.
+    /// @param value  The value of the delimiter.
     /// @param action The action to perform when the delimiter is encountered.
     /// @return This ASTDefinitionTemplate.
     @Override
@@ -66,7 +67,7 @@ public final class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<AS
 
     /// Adds an identifier step to the definition.
     ///
-    /// @param type The type of the identifier.
+    /// @param type   The type of the identifier.
     /// @param action The action to perform when the identifier is encountered.
     /// @return This ASTDefinitionTemplate.
     @Override
@@ -78,7 +79,7 @@ public final class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<AS
 
     /// Adds a literal step to the definition.
     ///
-    /// @param type The type of the literal.
+    /// @param type   The type of the literal.
     /// @param action The action to perform when the literal is encountered.
     /// @return This ASTDefinitionTemplate.
     @Override
@@ -118,7 +119,7 @@ public final class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<AS
     {
         return new ASTDefinitionTemplateOptional<>(this);
     }
-    
+
     /// Creates a new choice template construct.
     ///
     /// @return A new ASTDefinitionTemplateChoice.
@@ -142,7 +143,7 @@ public final class ASTDefinitionTemplate implements ASTDefinitionStepTemplate<AS
     /// Ends the definition and adds it to the ASTRuleTemplate with a custom error hint.
     ///
     /// @param supplier The supplier to use when the definition is encountered.
-    /// @param hint A custom hint to display when parsing fails for this definition.
+    /// @param hint     A custom hint to display when parsing fails for this definition.
     /// @return The ASTRuleTemplate.
     public ASTRuleTemplate endDefinition(ASTNodeSupplier supplier, String hint)
     {

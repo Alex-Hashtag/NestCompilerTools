@@ -4,7 +4,7 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
+
 
 /// Manages and reports compiler errors and warnings.
 ///
@@ -75,12 +75,14 @@ public final class ErrorManager
     }
 
     /// Set whether error codes should be displayed
-    public void setShowErrorCodes(boolean showErrorCodes) {
+    public void setShowErrorCodes(boolean showErrorCodes)
+    {
         this.showErrorCodes = showErrorCodes;
     }
 
     /// Set the number of context lines to show above and below errors
-    public void setContextLines(int contextLines) {
+    public void setContextLines(int contextLines)
+    {
         this.contextLines = Math.max(0, contextLines);
     }
 
@@ -88,19 +90,23 @@ public final class ErrorManager
     public void printReports(PrintStream out)
     {
         // Summary header
-        if (!errors.isEmpty() || !warnings.isEmpty()) {
+        if (!errors.isEmpty() || !warnings.isEmpty())
+        {
             printDivider(out);
             out.print(ANSI.BOLD);
-            if (!errors.isEmpty()) {
+            if (!errors.isEmpty())
+            {
                 out.print(ANSI.RED + "error" + ANSI.RESET + ANSI.BOLD + ": ");
                 out.print("found " + errors.size() + " error" + (errors.size() > 1 ? "s" : ""));
-                
-                if (!warnings.isEmpty()) {
+
+                if (!warnings.isEmpty())
+                {
                     out.print(" and ");
                 }
             }
-            
-            if (!warnings.isEmpty()) {
+
+            if (!warnings.isEmpty())
+            {
                 out.print(ANSI.YELLOW + "warning" + ANSI.RESET + ANSI.BOLD + ": ");
                 out.print("found " + warnings.size() + " warning" + (warnings.size() > 1 ? "s" : ""));
             }
@@ -109,29 +115,35 @@ public final class ErrorManager
         }
 
         // Print all errors first
-        if (!errors.isEmpty()) {
-            errors.forEach(err -> {
+        if (!errors.isEmpty())
+        {
+            errors.forEach(err ->
+            {
                 printSingle(out, err, true);
                 out.println();  // Extra blank line between errors
             });
         }
 
         // Then print all warnings
-        if (!warnings.isEmpty()) {
-            warnings.forEach(warn -> {
+        if (!warnings.isEmpty())
+        {
+            warnings.forEach(warn ->
+            {
                 printSingle(out, warn, false);
                 out.println();  // Extra blank line between warnings
             });
         }
 
         // Final summary if errors exist
-        if (!errors.isEmpty()) {
-            out.println(ANSI.RED + ANSI.BOLD + "error" + ANSI.RESET + ": aborting due to " + 
-                       errors.size() + " previous error" + (errors.size() > 1 ? "s" : ""));
+        if (!errors.isEmpty())
+        {
+            out.println(ANSI.RED + ANSI.BOLD + "error" + ANSI.RESET + ": aborting due to " +
+                    errors.size() + " previous error" + (errors.size() > 1 ? "s" : ""));
         }
     }
 
-    private void printDivider(PrintStream out) {
+    private void printDivider(PrintStream out)
+    {
         out.println(ANSI.DIM + "=" + "=".repeat(78) + ANSI.RESET);
     }
 
@@ -140,16 +152,17 @@ public final class ErrorManager
         String label = isError ? "error" : "warning";
         String primaryColor = isError ? ANSI.RED : ANSI.YELLOW;
         String secondaryColor = ANSI.CYAN;
-        String errorCode = isError ? "E" + String.format("%04d", error.hashCode() & 0xFFFF) : 
-                                    "W" + String.format("%04d", error.hashCode() & 0xFFFF);
+        String errorCode = isError ? "E" + String.format("%04d", error.hashCode() & 0xFFFF) :
+                "W" + String.format("%04d", error.hashCode() & 0xFFFF);
 
         // File location header with error code
         out.print(ANSI.BOLD + primaryColor + label);
-        if (showErrorCodes) {
+        if (showErrorCodes)
+        {
             out.print("[" + errorCode + "]");
         }
         out.println(ANSI.RESET + ANSI.BOLD + ": " + error.getMessage() + ANSI.RESET);
-        
+
         // Location header
         out.println(ANSI.BLUE + "  --> " + fileName + ":" + error.getLine() + ":" + error.getColumn() + ANSI.RESET);
 
@@ -161,12 +174,13 @@ public final class ErrorManager
         {
             out.println();
             out.print(secondaryColor + ANSI.BOLD + "help" + ANSI.RESET + secondaryColor + ": ");
-            
+
             // Format multi-line hints with proper indentation
             String[] hintLines = error.getHint().split("\n");
             out.println(hintLines[0] + ANSI.RESET);
-            
-            for (int i = 1; i < hintLines.length; i++) {
+
+            for (int i = 1; i < hintLines.length; i++)
+            {
                 out.println(secondaryColor + "      " + hintLines[i] + ANSI.RESET);
             }
         }
@@ -175,18 +189,22 @@ public final class ErrorManager
         suggestFix(out, error);
     }
 
-    private void suggestFix(PrintStream out, CompilerError error) {
+    private void suggestFix(PrintStream out, CompilerError error)
+    {
         // This could be expanded with more error-specific suggestions
         String message = error.getMessage();
-        
-        if (message.contains("Expected") && message.contains("but got")) {
+
+        if (message.contains("Expected") && message.contains("but got"))
+        {
             out.println();
-            out.println(ANSI.GREEN + ANSI.BOLD + "suggestion" + ANSI.RESET + ANSI.GREEN + 
-                      ": replace the incorrect token with the expected one" + ANSI.RESET);
-        } else if (message.contains("Unknown identifier")) {
+            out.println(ANSI.GREEN + ANSI.BOLD + "suggestion" + ANSI.RESET + ANSI.GREEN +
+                    ": replace the incorrect token with the expected one" + ANSI.RESET);
+        }
+        else if (message.contains("Unknown identifier"))
+        {
             out.println();
-            out.println(ANSI.GREEN + ANSI.BOLD + "suggestion" + ANSI.RESET + ANSI.GREEN + 
-                      ": check for typos or make sure the identifier is defined before use" + ANSI.RESET);
+            out.println(ANSI.GREEN + ANSI.BOLD + "suggestion" + ANSI.RESET + ANSI.GREEN +
+                    ": check for typos or make sure the identifier is defined before use" + ANSI.RESET);
         }
     }
 
@@ -195,37 +213,47 @@ public final class ErrorManager
         int errorLine = error.getLine();
         String token = error.getToken();
         boolean isEOF = "<eof>".equals(token) || "End".equals(token);
-        
+
         // Check if we have valid source lines
-        if (errorLine <= 0 || sourceLines.isEmpty()) {
+        if (errorLine <= 0 || sourceLines.isEmpty())
+        {
             return;
         }
-        
+
         // If error is beyond source lines (EOF case), adjust to show last non-empty line
         if (errorLine > sourceLines.size())
         {
-            if (isEOF) {
+            if (isEOF)
+            {
                 // Show the last non-empty line with EOF indicator
                 errorLine = sourceLines.size();
-            } else {
+            }
+            else
+            {
                 return;
             }
         }
-        
+
         // For EOF errors, adjust to show the last meaningful line
-        if (isEOF) {
+        if (isEOF)
+        {
             // If error line is beyond source, use the last line
-            if (errorLine > sourceLines.size()) {
+            if (errorLine > sourceLines.size())
+            {
                 errorLine = sourceLines.size();
             }
-            
+
             // If on an empty line, find the last non-empty line
-            if (errorLine <= sourceLines.size() && errorLine > 0) {
+            if (errorLine <= sourceLines.size() && errorLine > 0)
+            {
                 String currentLine = sourceLines.get(errorLine - 1);
-                if (currentLine.trim().isEmpty()) {
+                if (currentLine.trim().isEmpty())
+                {
                     // Find the last non-empty line before this
-                    for (int i = errorLine - 1; i >= 1; i--) {
-                        if (!sourceLines.get(i - 1).trim().isEmpty()) {
+                    for (int i = errorLine - 1; i >= 1; i--)
+                    {
+                        if (!sourceLines.get(i - 1).trim().isEmpty())
+                        {
                             errorLine = i;
                             break;
                         }
@@ -247,7 +275,8 @@ public final class ErrorManager
 
         // Print context lines before error
         int contextStart = Math.max(1, errorLine - contextLines);
-        for (int i = contextStart; i < errorLine; i++) {
+        for (int i = contextStart; i < errorLine; i++)
+        {
             printCodeLine(out, i, lineNumFormat, ANSI.BLUE, null, 0, 0);
         }
 
@@ -255,14 +284,15 @@ public final class ErrorManager
         // For EOF errors, highlight at the end of the line or show empty line
         int tokenLength = isEOF ? 0 : error.getToken().length();
         int column = error.getColumn();
-        
+
         // If EOF and we're showing the last line, position at end of line
-        if (isEOF && errorLine <= sourceLines.size()) {
+        if (isEOF && errorLine <= sourceLines.size())
+        {
             String lastLine = sourceLines.get(errorLine - 1);
             column = lastLine.length() + 1; // Position after last character
             tokenLength = 1; // Show a single caret
         }
-        
+
         printCodeLine(out, errorLine, lineNumFormat, ANSI.BLUE + ANSI.BOLD, highlightColor,
                 column, tokenLength);
 
@@ -272,24 +302,28 @@ public final class ErrorManager
 
         out.print(ANSI.BLUE + emptyLineNum + " |" + ANSI.RESET + " ");
         out.print(" ".repeat(Math.max(0, underlineStart)));
-        
+
         // Create underline with primary error message
         out.print(ANSI.BOLD + highlightColor);
-        
+
         // If token is very small, use a caret, otherwise use underlines with carets at the ends
-        if (underlineLength <= 2) {
+        if (underlineLength <= 2)
+        {
             out.print("^");
-        } else {
+        }
+        else
+        {
             out.print("^" + "~".repeat(underlineLength - 2) + "^");
         }
-        
+
         // Add inline error note for better context
         String shortDesc = isEOF ? "unexpected end of file" : getShortErrorDescription(error);
         out.println(" " + shortDesc + ANSI.RESET);
 
         // Print context lines after error
         int contextEnd = Math.min(sourceLines.size(), errorLine + contextLines);
-        for (int i = errorLine + 1; i <= contextEnd; i++) {
+        for (int i = errorLine + 1; i <= contextEnd; i++)
+        {
             printCodeLine(out, i, lineNumFormat, ANSI.BLUE, null, 0, 0);
         }
 
@@ -297,13 +331,15 @@ public final class ErrorManager
         out.println(ANSI.BLUE + emptyLineNum + " |" + ANSI.RESET);
     }
 
-    private String getShortErrorDescription(CompilerError error) {
+    private String getShortErrorDescription(CompilerError error)
+    {
         // Create a shorter, more specific error message for inline display
         String message = error.getMessage();
-        
+
         // Truncate if too long
         int maxLength = 40;
-        if (message.length() > maxLength) {
+        if (message.length() > maxLength)
+        {
             return message.substring(0, maxLength - 3) + "...";
         }
         return message;

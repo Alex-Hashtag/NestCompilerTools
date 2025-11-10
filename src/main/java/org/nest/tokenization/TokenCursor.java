@@ -40,6 +40,12 @@ public class TokenCursor
         this(tokens, false);
     }
 
+    /// Factory helper used by parsers to create a cursor for a token list.
+    public static TokenCursor wrap(TokenList tokens, boolean ignoreComments)
+    {
+        return new TokenCursor(tokens, ignoreComments);
+    }
+
     /// Checks if there are more tokens to consume.
     ///
     /// @return true if there are more tokens available, false otherwise
@@ -159,12 +165,6 @@ public class TokenCursor
         return currentPosition;
     }
 
-    /// Returns the current cursor position (alias for getPosition()).
-    public int getCurrentPosition()
-    {
-        return getPosition();
-    }
-
     /// Sets the cursor to a specific position in the token list.
     ///
     /// @param position the position to move to
@@ -183,6 +183,12 @@ public class TokenCursor
         {
             skipComments();
         }
+    }
+
+    /// Returns the current cursor position (alias for getPosition()).
+    public int getCurrentPosition()
+    {
+        return getPosition();
     }
 
     /// Checks if the current token matches a specific token type.
@@ -232,11 +238,5 @@ public class TokenCursor
     public boolean isAtEnd()
     {
         return currentPosition >= tokens.size() - 1;
-    }
-
-    /// Factory helper used by parsers to create a cursor for a token list.
-    public static TokenCursor wrap(TokenList tokens, boolean ignoreComments)
-    {
-        return new TokenCursor(tokens, ignoreComments);
     }
 }

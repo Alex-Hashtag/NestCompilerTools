@@ -8,12 +8,13 @@ import org.nest.ast.state.Step;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /// Template for defining optional steps in an AST rule.
 ///
 /// @param <O> The type parameter for this optional template (self-type)
 /// @param <P> The type of the parent template
 public final class ASTDefinitionTemplateOptional<O extends ASTDefinitionStepTemplate<O>, P extends ASTDefinitionStepTemplate<P>>
-    implements ASTDefinitionStepTemplate<ASTDefinitionTemplateOptional<O, P>>
+        implements ASTDefinitionStepTemplate<ASTDefinitionTemplateOptional<O, P>>
 {
     P parent;
     List<Step> children;

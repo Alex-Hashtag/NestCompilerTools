@@ -22,24 +22,38 @@ public class Context implements LLVMPipelineComponent
         this.module = LLVM.LLVMModuleCreateWithNameInContext("module", context);
         this.typeFactory = new TypeFactory(context);
     }
+
     public static Context create()
     {
         return new Context(LLVM.LLVMContextCreate());
     }
 
 
-    public LLVMContextRef getContextRef() { return context; }
-    public LLVMModuleRef getModuleRef() { return module; }
-    public TypeFactory types() { return typeFactory; }
+    public LLVMContextRef getContextRef()
+    {
+        return context;
+    }
+
+    public LLVMModuleRef getModuleRef()
+    {
+        return module;
+    }
+
+    public TypeFactory types()
+    {
+        return typeFactory;
+    }
 
     public Function defineFunction(String name,
                                    Type returnType,
                                    Type[] paramTypes,
-                                   boolean variadic) {
+                                   boolean variadic)
+    {
         return new Function(context, module, name, returnType, paramTypes, variadic);
     }
 
-    public void dispose() {
+    public void dispose()
+    {
         LLVM.LLVMContextDispose(context);
 //        LLVM.LLVMDisposeModule(module);
     }

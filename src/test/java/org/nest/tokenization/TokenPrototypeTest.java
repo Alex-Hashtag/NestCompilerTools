@@ -1,62 +1,75 @@
 package org.nest.tokenization;
 
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
 
-class TokenPrototypeTest {
-    
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+
+class TokenPrototypeTest
+{
+
     @Test
-    void testKeywordPrototype() {
+    void testKeywordPrototype()
+    {
         TokenPrototype.Keyword keyword = new TokenPrototype.Keyword("if");
         assertEquals("if", keyword.value());
     }
-    
+
     @Test
-    void testDelimiterPrototype() {
+    void testDelimiterPrototype()
+    {
         TokenPrototype.Delimiter delimiter = new TokenPrototype.Delimiter("{");
         assertEquals("{", delimiter.value());
     }
-    
+
     @Test
-    void testOperatorPrototype() {
+    void testOperatorPrototype()
+    {
         TokenPrototype.Operator operator = new TokenPrototype.Operator("+");
         assertEquals("+", operator.value());
     }
-    
+
     @Test
-    void testLiteralPrototype() {
+    void testLiteralPrototype()
+    {
         TokenPrototype.Literal literal = new TokenPrototype.Literal("string", "\"[^\"]*\"");
         assertEquals("string", literal.type());
         assertEquals("\"[^\"]*\"", literal.regex());
     }
-    
+
     @Test
-    void testIdentifierPrototype() {
+    void testIdentifierPrototype()
+    {
         TokenPrototype.Identifier identifier = new TokenPrototype.Identifier("variable", "[a-zA-Z_][a-zA-Z0-9_]*");
         assertEquals("variable", identifier.type());
         assertEquals("[a-zA-Z_][a-zA-Z0-9_]*", identifier.regex());
     }
-    
+
     @Test
-    void testCommentPrototype() {
+    void testCommentPrototype()
+    {
         TokenPrototype.Comment comment = new TokenPrototype.Comment("//.*");
         assertEquals("//.*", comment.regex());
     }
-    
+
     @Test
-    void testStartPrototype() {
+    void testStartPrototype()
+    {
         TokenPrototype.Start start = new TokenPrototype.Start();
         assertNotNull(start);
     }
-    
+
     @Test
-    void testEndPrototype() {
+    void testEndPrototype()
+    {
         TokenPrototype.End end = new TokenPrototype.End();
         assertNotNull(end);
     }
-    
+
     @Test
-    void testNewLinePrototype() {
+    void testNewLinePrototype()
+    {
         TokenPrototype.NewLine newLine = new TokenPrototype.NewLine();
         assertNotNull(newLine);
     }

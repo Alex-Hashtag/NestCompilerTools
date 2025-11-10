@@ -1,11 +1,11 @@
 package org.nest.lisp.ast;
 
 import org.nest.ast.ASTWrapper;
-import org.nest.tokenization.Coordinates;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+
 
 /// Root of the Lisp Abstract Syntax Tree.
 /// Provides methods to convert from ASTWrapper, print as tree, and generate code.

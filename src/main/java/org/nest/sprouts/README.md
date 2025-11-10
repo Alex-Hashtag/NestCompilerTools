@@ -5,13 +5,15 @@ Complete implementation of the Sprout-S programming language with parser, interp
 ## Components
 
 ### Core Files
+
 - **`SproutSTokenRules.java`** - Lexical tokenization rules
-- **`SproutSASTRules.java`** - AST parsing rules  
+- **`SproutSASTRules.java`** - AST parsing rules
 - **`SproutSInterpreter.java`** - Runtime interpreter with ErrorManager integration
 - **`SproutSRunner.java`** - Main entry point for running programs
 - **`DocS.md`** - Complete language specification
 
 ### AST Nodes (`ast/` directory)
+
 - `Program.java` - Root node
 - `Stmt.java` - Statement types (Let, Set, If, While, Print, Exit)
 - `Expr.java` - Expression types (Int, Var, Unary, Binary, Group)
@@ -20,6 +22,7 @@ Complete implementation of the Sprout-S programming language with parser, interp
 ## Running Programs
 
 ### Using the Runner
+
 ```bash
 # Run a Sprout-S file
 java -cp target/classes org.nest.sprouts.SproutSRunner program.spr
@@ -29,6 +32,7 @@ java -cp target/classes org.nest.sprouts.SproutSRunner --sample
 ```
 
 ### Example Program
+
 ```sprout-s
 let a = 0;
 let b = 1;

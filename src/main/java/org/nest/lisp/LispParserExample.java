@@ -16,22 +16,27 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Locale;
 
+
 /**
  * Robust parser runner for the Lisp parser.
- *
+ * <p>
  * Usage:
- *   java org.nest.lisp.LispParserExample [--sample | --stdin | <path/to/file.lisp>] [--show-tokens] [--no-regen]
- *
+ * java org.nest.lisp.LispParserExample [--sample | --stdin | <path/to/file.lisp>] [--show-tokens] [--no-regen]
+ * <p>
  * Exit codes:
- *   0 = success (parsed without errors)
- *   1 = parse/tokenization errors
- *   2 = I/O or unexpected failure
+ * 0 = success (parsed without errors)
+ * 1 = parse/tokenization errors
+ * 2 = I/O or unexpected failure
  */
-public final class LispParserExample {
+public final class LispParserExample
+{
 
-    private LispParserExample() {}
+    private LispParserExample()
+    {
+    }
 
-    public static void main(String[] args) {
+    public static void main(String[] args)
+    {
         Locale.setDefault(Locale.ROOT);
 
         boolean useSample = false;
@@ -41,16 +46,22 @@ public final class LispParserExample {
         Path file = null;
 
         // Parse flags/args
-        for (String arg : args) {
-            switch (arg) {
+        for (String arg : args)
+        {
+            switch (arg)
+            {
                 case "--sample" -> useSample = true;
                 case "--stdin" -> useStdin = true;
                 case "--show-tokens" -> showTokens = true;
                 case "--no-regen" -> noRegen = true;
-                default -> {
-                    if (file == null) {
+                default ->
+                {
+                    if (file == null)
+                    {
                         file = Path.of(arg);
-                    } else {
+                    }
+                    else
+                    {
                         logErr("Unexpected argument: " + arg);
                         printUsageAndExit(2);
                     }
@@ -60,22 +71,30 @@ public final class LispParserExample {
         // Validate arg combinations
         int sources = (useSample ? 1 : 0) + (useStdin ? 1 : 0) + (file != null ? 1 : 0);
         if (sources == 0) useSample = true; // default to sample
-        if (sources > 1) {
+        if (sources > 1)
+        {
             logErr("Choose exactly one source: --sample, --stdin, or a file path.");
             printUsageAndExit(2);
         }
 
         // 1) Load code
         String lispCode;
-        try {
-            if (useSample) {
+        try
+        {
+            if (useSample)
+            {
                 lispCode = sample();
-            } else if (useStdin) {
+            }
+            else if (useStdin)
+            {
                 lispCode = readAllFromStdin();
-            } else {
+            }
+            else
+            {
                 lispCode = Files.readString(file, StandardCharsets.UTF_8);
             }
-        } catch (IOException ioe) {
+        } catch (IOException ioe)
+        {
             logErr("Failed to read input: " + ioe.getMessage());
             System.exit(2);
             return;
@@ -87,13 +106,15 @@ public final class LispParserExample {
         // 2) Tokenize
         TokenList tokens;
         Instant t0 = Instant.now();
-        try {
+        try
+        {
             tokens = TokenList.create(
                     lispCode,
                     LispTokenRules.create(),
                     LispTokenProcessor.create()
             );
-        } catch (Throwable t) {
+        } catch (Throwable t)
+        {
             section("Tokenizer Crash");
             t.printStackTrace(System.err);
             System.exit(2);
@@ -102,9 +123,12 @@ public final class LispParserExample {
         Instant t1 = Instant.now();
 
         section("Tokens (" + tokens.size() + ") in " + pretty(Duration.between(t0, t1)));
-        if (showTokens) {
+        if (showTokens)
+        {
             System.out.println(tokens);
-        } else {
+        }
+        else
+        {
             // Show a short preview to avoid flooding output
             String tokStr = tokens.toString();
             System.out.println(tokStr.length() > 1000 ? tokStr.substring(0, 1000) + "\n... (use --show-tokens to print all)" : tokStr);
@@ -116,9 +140,11 @@ public final class LispParserExample {
 
         LispAST ast;
         Instant p0 = Instant.now();
-        try {
+        try
+        {
             ast = LispParser.parse(lispCode, errorManager);
-        } catch (Throwable t) {
+        } catch (Throwable t)
+        {
             section("Parser Crash");
             t.printStackTrace(System.err);
             System.exit(2);
@@ -126,7 +152,8 @@ public final class LispParserExample {
         }
         Instant p1 = Instant.now();
 
-        if (errorManager.hasErrors() || ast == null) {
+        if (errorManager.hasErrors() || ast == null)
+        {
             section("Parse Errors (" + errorManager.getErrors().size() + ") in " + pretty(Duration.between(p0, p1)));
             errorManager.printReports(System.out);
             System.exit(1);
@@ -134,18 +161,23 @@ public final class LispParserExample {
         }
 
         section("AST Tree Structure in " + pretty(Duration.between(p0, p1)));
-        try {
+        try
+        {
             System.out.println(ast.printTree(0));
-        } catch (Throwable t) {
+        } catch (Throwable t)
+        {
             logErr("AST printTree failed: " + t.getMessage());
         }
 
         // 4) Regenerate code
-        if (!noRegen) {
+        if (!noRegen)
+        {
             section("Regenerated Lisp Code");
-            try {
+            try
+            {
                 System.out.println(ast.generateCode());
-            } catch (Throwable t) {
+            } catch (Throwable t)
+            {
                 logErr("Code generation failed: " + t.getMessage());
                 System.exit(1);
                 return;
@@ -155,14 +187,19 @@ public final class LispParserExample {
         // 5) Simplified API demo (kept, but hardened)
         section("Using Simplified Parser API");
         String simpleCode = "(define (add x y) (+ x y))";
-        try {
+        try
+        {
             LispAST simpleAst = LispParser.parseWithErrorOutput(simpleCode, System.out);
-            if (simpleAst != null) {
+            if (simpleAst != null)
+            {
                 System.out.println("Parsed successfully: " + simpleAst.generateCode());
-            } else {
+            }
+            else
+            {
                 System.out.println("Failed to parse simple program.");
             }
-        } catch (Throwable t) {
+        } catch (Throwable t)
+        {
             logErr("Simplified API failed: " + t.getMessage());
             System.exit(1);
             return;
@@ -173,16 +210,19 @@ public final class LispParserExample {
 
     // ----------------- helpers -----------------
 
-    private static String sample() {
+    private static String sample()
+    {
         return """
                 ; Test with a simple missing closing parenthesis
                 ((define x 10)
                 """;
     }
 
-    private static String readAllFromStdin() throws IOException {
+    private static String readAllFromStdin() throws IOException
+    {
         StringBuilder sb = new StringBuilder(8 * 1024);
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)))
+        {
             char[] buf = new char[4096];
             int r;
             while ((r = br.read(buf)) != -1) sb.append(buf, 0, r);
@@ -190,15 +230,18 @@ public final class LispParserExample {
         return sb.toString();
     }
 
-    private static void section(String title) {
+    private static void section(String title)
+    {
         System.out.println("\n=== " + title + " ===");
     }
 
-    private static void logErr(String msg) {
+    private static void logErr(String msg)
+    {
         System.err.println("[LispParserExample] " + msg);
     }
 
-    private static void printUsageAndExit(int code) {
+    private static void printUsageAndExit(int code)
+    {
         System.err.println("Usage:\n" +
                 "  java " + LispParserExample.class.getName() + " [--sample | --stdin | <file>] [--show-tokens] [--no-regen]\n" +
                 "\nExamples:\n" +
@@ -212,7 +255,8 @@ public final class LispParserExample {
         System.exit(code);
     }
 
-    private static String pretty(Duration d) {
+    private static String pretty(Duration d)
+    {
         long ms = d.toMillis();
         if (ms < 1000) return ms + " ms";
         long s = ms / 1000;

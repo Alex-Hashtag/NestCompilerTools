@@ -475,168 +475,161 @@ public final class TokenList implements Iterable<Token>
     {
     }
 
-    private static class InternalProto
-    {
-        final InternalProtoType type;
-        final String fixedString;   // for Keyword, Operator, Delimiter
-        final String literalType;   // for Literal/Identifier
-        final Pattern pattern;      // for Comment, Literal, Identifier
-
-        private InternalProto(InternalProtoType type, String fixedString, String literalType, Pattern pattern)
+    /**
+     * @param fixedString for Keyword, Operator, Delimiter
+     * @param literalType for Literal/Identifier
+     * @param pattern     for Comment, Literal, Identifier
+     */
+    private record InternalProto(InternalProtoType type, String fixedString, String literalType, Pattern pattern)
         {
-            this.type = type;
-            this.fixedString = fixedString;
-            this.literalType = literalType;
-            this.pattern = pattern;
-        }
 
-        static InternalProto keyword(String word, boolean caseSensitive)
-        {
-            String val = caseSensitive ? word : word.toLowerCase(Locale.ROOT);
-            return new InternalProto(InternalProtoType.KEYWORD, val, null, null);
-        }
-
-        static InternalProto delimiter(String val)
-        {
-            return new InternalProto(InternalProtoType.DELIMITER, val, null, null);
-        }
-
-        static InternalProto operator(String val)
-        {
-            return new InternalProto(InternalProtoType.OPERATOR, val, null, null);
-        }
-
-        static InternalProto comment(String userRegex)
-        {
-            String cleaned = cleanAnchors(userRegex);
-            Pattern p = Pattern.compile("^(?:" + cleaned + ")");
-            return new InternalProto(InternalProtoType.COMMENT, null, null, p);
-        }
-
-        static InternalProto literal(String type, String userRegex)
-        {
-            String cleaned = cleanAnchors(userRegex);
-            Pattern p = Pattern.compile("^(?:" + cleaned + ")");
-            return new InternalProto(InternalProtoType.LITERAL, null, type, p);
-        }
-
-        static InternalProto identifier(String type, String userRegex)
-        {
-            String cleaned = cleanAnchors(userRegex);
-            Pattern p = Pattern.compile("^(?:" + cleaned + ")");
-            return new InternalProto(InternalProtoType.IDENTIFIER, null, type, p);
-        }
-
-        private static String cleanAnchors(String regex)
-        {
-            String out = regex;
-            if (out.startsWith("^"))
+            static InternalProto keyword(String word, boolean caseSensitive)
             {
-                out = out.substring(1);
-            }
-            if (out.endsWith("$"))
-            {
-                out = out.substring(0, out.length() - 1);
-            }
-            return out;
-        }
-
-        private static boolean isAlpha(String s)
-        {
-            for (char c : s.toCharArray())
-            {
-                if (!Character.isLetter(c)) return false;
-            }
-            return true;
-        }
-
-        private static boolean isIdentifierChar(char c)
-        {
-            return Character.isLetterOrDigit(c) || c == '_';
-        }
-
-        MatchResult match(String input, int index, int line, int col, boolean caseSensitive)
-        {
-            if (index >= input.length()) return null;
-
-            return switch (type)
-            {
-                case KEYWORD -> matchKeyword(input, index, line, col, caseSensitive);
-                case DELIMITER, OPERATOR -> matchFixedString(input, index, line, col);
-                case COMMENT, LITERAL, IDENTIFIER -> matchRegex(input, index, line, col);
-            };
-        }
-
-        private MatchResult matchKeyword(String input, int index, int line, int col, boolean caseSensitive)
-        {
-            String kw = this.fixedString;
-            int len = kw.length();
-
-            if (index + len > input.length()) return null;
-            String chunk = input.substring(index, index + len);
-            if (!caseSensitive)
-                chunk = chunk.toLowerCase(Locale.ROOT);
-            if (!chunk.equals(kw)) return null;
-
-            // If purely alphabetical, ensure boundary
-            if (isAlpha(kw) && index + len < input.length())
-            {
-                char next = input.charAt(index + len);
-                if (isIdentifierChar(next))
-                    return null; // e.g. "and" vs "andres"
+                String val = caseSensitive ? word : word.toLowerCase(Locale.ROOT);
+                return new InternalProto(InternalProtoType.KEYWORD, val, null, null);
             }
 
-            return new MatchResult(len,
-                    new Token.Keyword(new Coordinates(line, col), input.substring(index, index + len)));
-        }
-
-        private MatchResult matchFixedString(String input, int index, int line, int col)
-        {
-            String val = this.fixedString;
-            int len = val.length();
-            if (index + len > input.length()) return null;
-
-            String chunk = input.substring(index, index + len);
-            if (!chunk.equals(val)) return null;
-
-            // Boundary check if alphabetical
-            if (isAlpha(val) && index + len < input.length())
+            static InternalProto delimiter(String val)
             {
-                char next = input.charAt(index + len);
-                if (isIdentifierChar(next))
+                return new InternalProto(InternalProtoType.DELIMITER, val, null, null);
+            }
+
+            static InternalProto operator(String val)
+            {
+                return new InternalProto(InternalProtoType.OPERATOR, val, null, null);
+            }
+
+            static InternalProto comment(String userRegex)
+            {
+                String cleaned = cleanAnchors(userRegex);
+                Pattern p = Pattern.compile("^(?:" + cleaned + ")");
+                return new InternalProto(InternalProtoType.COMMENT, null, null, p);
+            }
+
+            static InternalProto literal(String type, String userRegex)
+            {
+                String cleaned = cleanAnchors(userRegex);
+                Pattern p = Pattern.compile("^(?:" + cleaned + ")");
+                return new InternalProto(InternalProtoType.LITERAL, null, type, p);
+            }
+
+            static InternalProto identifier(String type, String userRegex)
+            {
+                String cleaned = cleanAnchors(userRegex);
+                Pattern p = Pattern.compile("^(?:" + cleaned + ")");
+                return new InternalProto(InternalProtoType.IDENTIFIER, null, type, p);
+            }
+
+            private static String cleanAnchors(String regex)
+            {
+                String out = regex;
+                if (out.startsWith("^"))
                 {
-                    return null;
+                    out = out.substring(1);
                 }
+                if (out.endsWith("$"))
+                {
+                    out = out.substring(0, out.length() - 1);
+                }
+                return out;
             }
 
-            return switch (type)
+            private static boolean isAlpha(String s)
             {
-                case DELIMITER -> new MatchResult(len,
-                        new Token.Delimiter(new Coordinates(line, col), val));
-                case OPERATOR -> new MatchResult(len,
-                        new Token.Operator(new Coordinates(line, col), val));
-                default -> null; // not expected
-            };
-        }
+                for (char c : s.toCharArray())
+                {
+                    if (!Character.isLetter(c)) return false;
+                }
+                return true;
+            }
 
-        private MatchResult matchRegex(String input, int index, int line, int col)
-        {
-            Matcher m = pattern.matcher(input.substring(index));
-            if (!m.find() || m.start() != 0) return null;
-
-            String matchedText = m.group();
-            return switch (type)
+            private static boolean isIdentifierChar(char c)
             {
-                case COMMENT -> new MatchResult(matchedText.length(),
-                        new Token.Comment(new Coordinates(line, col), matchedText));
-                case LITERAL -> new MatchResult(matchedText.length(),
-                        new Token.Literal(new Coordinates(line, col), literalType, matchedText));
-                case IDENTIFIER -> new MatchResult(matchedText.length(),
-                        new Token.Identifier(new Coordinates(line, col), literalType, matchedText));
-                default -> null;
-            };
+                return Character.isLetterOrDigit(c) || c == '_';
+            }
+
+            MatchResult match(String input, int index, int line, int col, boolean caseSensitive)
+            {
+                if (index >= input.length()) return null;
+
+                return switch (type)
+                {
+                    case KEYWORD -> matchKeyword(input, index, line, col, caseSensitive);
+                    case DELIMITER, OPERATOR -> matchFixedString(input, index, line, col);
+                    case COMMENT, LITERAL, IDENTIFIER -> matchRegex(input, index, line, col);
+                };
+            }
+
+            private MatchResult matchKeyword(String input, int index, int line, int col, boolean caseSensitive)
+            {
+                String kw = this.fixedString;
+                int len = kw.length();
+
+                if (index + len > input.length()) return null;
+                String chunk = input.substring(index, index + len);
+                if (!caseSensitive)
+                    chunk = chunk.toLowerCase(Locale.ROOT);
+                if (!chunk.equals(kw)) return null;
+
+                // If purely alphabetical, ensure boundary
+                if (isAlpha(kw) && index + len < input.length())
+                {
+                    char next = input.charAt(index + len);
+                    if (isIdentifierChar(next))
+                        return null; // e.g. "and" vs "andres"
+                }
+
+                return new MatchResult(len,
+                        new Token.Keyword(new Coordinates(line, col), input.substring(index, index + len)));
+            }
+
+            private MatchResult matchFixedString(String input, int index, int line, int col)
+            {
+                String val = this.fixedString;
+                int len = val.length();
+                if (index + len > input.length()) return null;
+
+                String chunk = input.substring(index, index + len);
+                if (!chunk.equals(val)) return null;
+
+                // Boundary check if alphabetical
+                if (isAlpha(val) && index + len < input.length())
+                {
+                    char next = input.charAt(index + len);
+                    if (isIdentifierChar(next))
+                    {
+                        return null;
+                    }
+                }
+
+                return switch (type)
+                {
+                    case DELIMITER -> new MatchResult(len,
+                            new Token.Delimiter(new Coordinates(line, col), val));
+                    case OPERATOR -> new MatchResult(len,
+                            new Token.Operator(new Coordinates(line, col), val));
+                    default -> null; // not expected
+                };
+            }
+
+            private MatchResult matchRegex(String input, int index, int line, int col)
+            {
+                Matcher m = pattern.matcher(input.substring(index));
+                if (!m.find() || m.start() != 0) return null;
+
+                String matchedText = m.group();
+                return switch (type)
+                {
+                    case COMMENT -> new MatchResult(matchedText.length(),
+                            new Token.Comment(new Coordinates(line, col), matchedText));
+                    case LITERAL -> new MatchResult(matchedText.length(),
+                            new Token.Literal(new Coordinates(line, col), literalType, matchedText));
+                    case IDENTIFIER -> new MatchResult(matchedText.length(),
+                            new Token.Identifier(new Coordinates(line, col), literalType, matchedText));
+                    default -> null;
+                };
+            }
         }
-    }
 
     private record MatchResult(int length, Token token)
     {

@@ -1,9 +1,8 @@
 package org.nest.lisp.ast;
 
-import org.nest.tokenization.Coordinates;
-
 import java.util.ArrayList;
 import java.util.List;
+
 
 /**
  * A LispList is a list of LispNodes.

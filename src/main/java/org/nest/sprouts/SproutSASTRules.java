@@ -1,10 +1,14 @@
 package org.nest.sprouts;
 
 import org.nest.ast.ASTRules;
-import org.nest.sprouts.ast.*;
+import org.nest.sprouts.ast.Block;
+import org.nest.sprouts.ast.Expr;
+import org.nest.sprouts.ast.Program;
+import org.nest.sprouts.ast.Stmt;
 
 import java.util.ArrayList;
 import java.util.List;
+
 
 /**
  * Defines the AST rules for Sprout-S language parsing.
@@ -22,36 +26,36 @@ public class SproutSASTRules
         return ASTRules.builder()
                 .ignoreComments(true)
                 .topRule(List.of("program"))
-                
+
                 // program := { statement } EOF
                 .startRule("program")
                 .addDefinition("program")
                 .repeat(ctx -> ctx.put("stmts", new ArrayList<Stmt>()))
-                    .rule("statement", ctx -> stmt -> ctx.<List<Stmt>>get("stmts").add((Stmt) stmt))
+                .rule("statement", ctx -> stmt -> ctx.<List<Stmt>>get("stmts").add((Stmt) stmt))
                 .stopRepeat()
                 .endDefinition(ctx -> () -> new Program(ctx.get("stmts", List.class)))
-                
+
                 // statement := let_stmt | set_stmt | if_stmt | while_stmt | print_stmt | exit_stmt
                 .startRule("statement")
                 .addDefinition("let")
-                    .rule("let_stmt", ctx -> stmt -> ctx.put("result", stmt))
+                .rule("let_stmt", ctx -> stmt -> ctx.put("result", stmt))
                 .endDefinition(ctx -> () -> ctx.get("result"))
                 .addDefinition("set")
-                    .rule("set_stmt", ctx -> stmt -> ctx.put("result", stmt))
+                .rule("set_stmt", ctx -> stmt -> ctx.put("result", stmt))
                 .endDefinition(ctx -> () -> ctx.get("result"))
                 .addDefinition("if")
-                    .rule("if_stmt", ctx -> stmt -> ctx.put("result", stmt))
+                .rule("if_stmt", ctx -> stmt -> ctx.put("result", stmt))
                 .endDefinition(ctx -> () -> ctx.get("result"))
                 .addDefinition("while")
-                    .rule("while_stmt", ctx -> stmt -> ctx.put("result", stmt))
+                .rule("while_stmt", ctx -> stmt -> ctx.put("result", stmt))
                 .endDefinition(ctx -> () -> ctx.get("result"))
                 .addDefinition("print")
-                    .rule("print_stmt", ctx -> stmt -> ctx.put("result", stmt))
+                .rule("print_stmt", ctx -> stmt -> ctx.put("result", stmt))
                 .endDefinition(ctx -> () -> ctx.get("result"))
                 .addDefinition("exit")
-                    .rule("exit_stmt", ctx -> stmt -> ctx.put("result", stmt))
+                .rule("exit_stmt", ctx -> stmt -> ctx.put("result", stmt))
                 .endDefinition(ctx -> () -> ctx.get("result"))
-                
+
                 // let_stmt := "let" IDENT "=" expr ";"
                 .startRule("let_stmt")
                 .addDefinition()
@@ -64,7 +68,7 @@ public class SproutSASTRules
                         ctx.get("name", String.class),
                         ctx.get("init", Expr.class)
                 ))
-                
+
                 // set_stmt := "set" IDENT "=" expr ";"
                 .startRule("set_stmt")
                 .addDefinition()
@@ -77,7 +81,7 @@ public class SproutSASTRules
                         ctx.get("name", String.class),
                         ctx.get("expr", Expr.class)
                 ))
-                
+
                 // if_stmt := "if" "(" expr ")" block "else" block
                 .startRule("if_stmt")
                 .addDefinition()
@@ -93,7 +97,7 @@ public class SproutSASTRules
                         ctx.get("then", Block.class),
                         ctx.get("else", Block.class)
                 ))
-                
+
                 // while_stmt := "while" "(" expr ")" block
                 .startRule("while_stmt")
                 .addDefinition()
@@ -106,7 +110,7 @@ public class SproutSASTRules
                         ctx.get("cond", Expr.class),
                         ctx.get("body", Block.class)
                 ))
-                
+
                 // print_stmt := "print" expr ";"
                 .startRule("print_stmt")
                 .addDefinition()
@@ -114,7 +118,7 @@ public class SproutSASTRules
                 .rule("expr", ctx -> expr -> ctx.put("expr", expr))
                 .delimiter(";", null)
                 .endDefinition(ctx -> () -> new Stmt.Print(ctx.get("expr", Expr.class)))
-                
+
                 // exit_stmt := "exit" expr ";"
                 .startRule("exit_stmt")
                 .addDefinition()
@@ -122,171 +126,189 @@ public class SproutSASTRules
                 .rule("expr", ctx -> expr -> ctx.put("expr", expr))
                 .delimiter(";", null)
                 .endDefinition(ctx -> () -> new Stmt.Exit(ctx.get("expr", Expr.class)))
-                
+
                 // block := "{" { statement } "}"
                 .startRule("block")
                 .addDefinition()
                 .delimiter("{", null)
                 .repeat(ctx -> ctx.put("stmts", new ArrayList<Stmt>()))
-                    .rule("statement", ctx -> stmt -> ctx.<List<Stmt>>get("stmts").add((Stmt) stmt))
+                .rule("statement", ctx -> stmt -> ctx.<List<Stmt>>get("stmts").add((Stmt) stmt))
                 .stopRepeat()
                 .delimiter("}", null)
                 .endDefinition(ctx -> () -> new Block(ctx.get("stmts", List.class)))
-                
+
                 // expr := logic_or
                 .startRule("expr")
                 .addDefinition()
                 .rule("logic_or", ctx -> expr -> ctx.put("result", expr))
                 .endDefinition(ctx -> () -> ctx.get("result"))
-                
+
                 // logic_or := logic_and { "||" logic_and }
                 .startRule("logic_or")
                 .addDefinition()
                 .rule("logic_and", ctx -> expr -> ctx.put("left", expr))
-                .repeat(ctx -> {
+                .repeat(ctx ->
+                {
                     ctx.put("ops", new ArrayList<String>());
                     return ctx.put("rights", new ArrayList<Expr>());
                 })
-                    .operator("||", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .rule("logic_and", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
+                .operator("||", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .rule("logic_and", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
                 .stopRepeat()
-                .endDefinition(ctx -> () -> {
+                .endDefinition(ctx -> () ->
+                {
                     Expr left = ctx.get("left", Expr.class);
                     List<String> ops = ctx.get("ops", List.class);
                     List<Expr> rights = ctx.get("rights", List.class);
-                    for (int i = 0; i < ops.size(); i++) {
+                    for (int i = 0; i < ops.size(); i++)
+                    {
                         left = new Expr.Binary(ops.get(i), left, rights.get(i));
                     }
                     return left;
                 })
-                
+
                 // logic_and := equality { "&&" equality }
                 .startRule("logic_and")
                 .addDefinition()
                 .rule("equality", ctx -> expr -> ctx.put("left", expr))
-                .repeat(ctx -> {
+                .repeat(ctx ->
+                {
                     ctx.put("ops", new ArrayList<String>());
                     return ctx.put("rights", new ArrayList<Expr>());
                 })
-                    .operator("&&", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .rule("equality", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
+                .operator("&&", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .rule("equality", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
                 .stopRepeat()
-                .endDefinition(ctx -> () -> {
+                .endDefinition(ctx -> () ->
+                {
                     Expr left = ctx.get("left", Expr.class);
                     List<String> ops = ctx.get("ops", List.class);
                     List<Expr> rights = ctx.get("rights", List.class);
-                    for (int i = 0; i < ops.size(); i++) {
+                    for (int i = 0; i < ops.size(); i++)
+                    {
                         left = new Expr.Binary(ops.get(i), left, rights.get(i));
                     }
                     return left;
                 })
-                
+
                 // equality := comparison { ( "==" | "!=" ) comparison }
                 .startRule("equality")
                 .addDefinition()
                 .rule("comparison", ctx -> expr -> ctx.put("left", expr))
-                .repeat(ctx -> {
+                .repeat(ctx ->
+                {
                     ctx.put("ops", new ArrayList<String>());
                     return ctx.put("rights", new ArrayList<Expr>());
                 })
-                    .choice()
-                        .operator("==", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .or()
-                        .operator("!=", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .endChoice()
-                    .rule("comparison", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
+                .choice()
+                .operator("==", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .or()
+                .operator("!=", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .endChoice()
+                .rule("comparison", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
                 .stopRepeat()
-                .endDefinition(ctx -> () -> {
+                .endDefinition(ctx -> () ->
+                {
                     Expr left = ctx.get("left", Expr.class);
                     List<String> ops = ctx.get("ops", List.class);
                     List<Expr> rights = ctx.get("rights", List.class);
-                    for (int i = 0; i < ops.size(); i++) {
+                    for (int i = 0; i < ops.size(); i++)
+                    {
                         left = new Expr.Binary(ops.get(i), left, rights.get(i));
                     }
                     return left;
                 })
-                
+
                 // comparison := term { ( "<" | "<=" | ">" | ">=" ) term }
                 .startRule("comparison")
                 .addDefinition()
                 .rule("term", ctx -> expr -> ctx.put("left", expr))
-                .repeat(ctx -> {
+                .repeat(ctx ->
+                {
                     ctx.put("ops", new ArrayList<String>());
                     return ctx.put("rights", new ArrayList<Expr>());
                 })
-                    .choice()
-                        .operator("<=", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .or()
-                        .operator(">=", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .or()
-                        .operator("<", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .or()
-                        .operator(">", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .endChoice()
-                    .rule("term", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
+                .choice()
+                .operator("<=", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .or()
+                .operator(">=", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .or()
+                .operator("<", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .or()
+                .operator(">", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .endChoice()
+                .rule("term", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
                 .stopRepeat()
-                .endDefinition(ctx -> () -> {
+                .endDefinition(ctx -> () ->
+                {
                     Expr left = ctx.get("left", Expr.class);
                     List<String> ops = ctx.get("ops", List.class);
                     List<Expr> rights = ctx.get("rights", List.class);
-                    for (int i = 0; i < ops.size(); i++) {
+                    for (int i = 0; i < ops.size(); i++)
+                    {
                         left = new Expr.Binary(ops.get(i), left, rights.get(i));
                     }
                     return left;
                 })
-                
+
                 // term := factor { ( "+" | "-" ) factor }
                 .startRule("term")
                 .addDefinition()
                 .rule("factor", ctx -> expr -> ctx.put("left", expr))
-                .repeat(ctx -> {
+                .repeat(ctx ->
+                {
                     ctx.put("ops", new ArrayList<String>());
                     return ctx.put("rights", new ArrayList<Expr>());
                 })
-                    .choice()
-                        .operator("+", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .or()
-                        .operator("-", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .endChoice()
-                    .rule("factor", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
+                .choice()
+                .operator("+", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .or()
+                .operator("-", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .endChoice()
+                .rule("factor", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
                 .stopRepeat()
-                .endDefinition(ctx -> () -> {
+                .endDefinition(ctx -> () ->
+                {
                     Expr left = ctx.get("left", Expr.class);
                     List<String> ops = ctx.get("ops", List.class);
                     List<Expr> rights = ctx.get("rights", List.class);
-                    for (int i = 0; i < ops.size(); i++) {
+                    for (int i = 0; i < ops.size(); i++)
+                    {
                         left = new Expr.Binary(ops.get(i), left, rights.get(i));
                     }
                     return left;
                 })
-                
+
                 // factor := unary { ( "*" | "/" | "%" ) unary }
                 .startRule("factor")
                 .addDefinition()
                 .rule("unary", ctx -> expr -> ctx.put("left", expr))
-                .repeat(ctx -> {
+                .repeat(ctx ->
+                {
                     ctx.put("ops", new ArrayList<String>());
                     return ctx.put("rights", new ArrayList<Expr>());
                 })
-                    .choice()
-                        .operator("*", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .or()
-                        .operator("/", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .or()
-                        .operator("%", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
-                    .endChoice()
-                    .rule("unary", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
+                .choice()
+                .operator("*", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .or()
+                .operator("/", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .or()
+                .operator("%", ctx -> token -> ctx.<List<String>>get("ops").add(token.getValue()))
+                .endChoice()
+                .rule("unary", ctx -> expr -> ctx.<List<Expr>>get("rights").add((Expr) expr))
                 .stopRepeat()
-                .endDefinition(ctx -> () -> {
+                .endDefinition(ctx -> () ->
+                {
                     Expr left = ctx.get("left", Expr.class);
                     List<String> ops = ctx.get("ops", List.class);
                     List<Expr> rights = ctx.get("rights", List.class);
-                    for (int i = 0; i < ops.size(); i++) {
+                    for (int i = 0; i < ops.size(); i++)
+                    {
                         left = new Expr.Binary(ops.get(i), left, rights.get(i));
                     }
                     return left;
                 })
-                
+
                 // unary := ( "-" | "!" ) unary | primary
                 .startRule("unary")
                 .addDefinition("unary_minus")
@@ -306,7 +328,7 @@ public class SproutSASTRules
                 .addDefinition("primary")
                 .rule("primary", ctx -> expr -> ctx.put("result", expr))
                 .endDefinition(ctx -> () -> ctx.get("result"))
-                
+
                 // primary := INT | IDENT | "(" expr ")"
                 .startRule("primary")
                 .addDefinition("int")
@@ -326,7 +348,7 @@ public class SproutSASTRules
                 .endDefinition(ctx -> () -> new Expr.Group(
                         ctx.get("expr", Expr.class)
                 ))
-                
+
                 .build();
     }
 }

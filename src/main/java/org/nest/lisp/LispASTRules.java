@@ -8,15 +8,18 @@ import org.nest.lisp.ast.LispNode;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * Defines the AST rules for Lisp language parsing.
  */
-public class LispASTRules {
+public class LispASTRules
+{
 
     /// Creates and returns the standard AST rules for Lisp.
     ///
     /// @return ASTRules configured for Lisp syntax
-    public static ASTRules create() {
+    public static ASTRules create()
+    {
 
         return ASTRules.builder()
                 .ignoreComments(true) // Enable comment skipping to avoid errors with comments
@@ -25,12 +28,14 @@ public class LispASTRules {
 
                 // ----- List Form -----
                 .addDefinition("list")
-                .delimiter("(", _ -> _ -> {
+                .delimiter("(", _ -> _ ->
+                {
                 })
                 .repeat(self -> self.put("elements", new ArrayList<LispNode>())) // init empty list
                 .rule("expr", self -> expr -> self.<List<LispNode>>get("elements").add((LispNode) expr))
                 .stopRepeat()
-                .delimiter(")", _ -> _ -> {
+                .delimiter(")", _ -> _ ->
+                {
                 })
                 .endDefinition(self -> () -> new LispList(
                         self.get("elements", List.class)
@@ -38,10 +43,12 @@ public class LispASTRules {
 
                 // ----- Quote Form -----
                 .addDefinition("quote")
-                .operator("'", self -> token -> {
+                .operator("'", self -> token ->
+                {
                 })
                 .rule("expr", self -> expr -> self.put("quoted", expr))
-                .endDefinition(self -> () -> {
+                .endDefinition(self -> () ->
+                {
                     // Create a quote list: (quote <expr>)
                     List<LispNode> elements = new ArrayList<>();
                     elements.add(new LispAtom.LispSymbol("quote"));
@@ -51,10 +58,12 @@ public class LispASTRules {
 
                 // ----- Quasiquote Form -----
                 .addDefinition("quasiquote")
-                .operator("`", self -> token -> {
+                .operator("`", self -> token ->
+                {
                 })
                 .rule("expr", self -> expr -> self.put("quoted", expr))
-                .endDefinition(self -> () -> {
+                .endDefinition(self -> () ->
+                {
                     // Create a quasiquote list: (quasiquote <expr>)
                     List<LispNode> elements = new ArrayList<>();
                     elements.add(new LispAtom.LispSymbol("quasiquote"));
@@ -64,10 +73,12 @@ public class LispASTRules {
 
                 // ----- Unquote Form -----
                 .addDefinition("unquote")
-                .operator(",", self -> token -> {
+                .operator(",", self -> token ->
+                {
                 })
                 .rule("expr", self -> expr -> self.put("unquoted", expr))
-                .endDefinition(self -> () -> {
+                .endDefinition(self -> () ->
+                {
                     // Create an unquote list: (unquote <expr>)
                     List<LispNode> elements = new ArrayList<>();
                     elements.add(new LispAtom.LispSymbol("unquote"));
@@ -77,10 +88,12 @@ public class LispASTRules {
 
                 // ----- Unquote-splicing Form -----
                 .addDefinition("unquote-splicing")
-                .operator(",@", self -> token -> {
+                .operator(",@", self -> token ->
+                {
                 })
                 .rule("expr", self -> expr -> self.put("unquoted", expr))
-                .endDefinition(self -> () -> {
+                .endDefinition(self -> () ->
+                {
                     // Create an unquote-splicing list: (unquote-splicing <expr>)
                     List<LispNode> elements = new ArrayList<>();
                     elements.add(new LispAtom.LispSymbol("unquote-splicing"));
@@ -90,7 +103,8 @@ public class LispASTRules {
 
                 // ----- String Literal -----
                 .addDefinition("string")
-                .literal("string", self -> token -> {
+                .literal("string", self -> token ->
+                {
                     self.put("value", token.getValue());
                 })
                 .endDefinition(self -> () -> new LispAtom.LispString(
@@ -99,7 +113,8 @@ public class LispASTRules {
 
                 // ----- Integer Literal -----
                 .addDefinition("int")
-                .literal("integer", self -> token -> {
+                .literal("integer", self -> token ->
+                {
                     self.put("value", token.getValue());
                 })
                 .endDefinition(self -> () -> new LispAtom.LispNumber(
@@ -108,7 +123,8 @@ public class LispASTRules {
 
                 // ----- Float Literal -----
                 .addDefinition("float")
-                .literal("float", self -> token -> {
+                .literal("float", self -> token ->
+                {
                     self.put("value", token.getValue());
                 })
                 .endDefinition(self -> () -> new LispAtom.LispNumber(
@@ -117,7 +133,8 @@ public class LispASTRules {
 
                 // ----- Boolean -----
                 .addDefinition("boolean")
-                .literal("boolean", self -> token -> {
+                .literal("boolean", self -> token ->
+                {
                     self.put("value", token.getValue());
                 })
                 .endDefinition(self -> () -> new LispAtom.LispBoolean(
@@ -126,7 +143,8 @@ public class LispASTRules {
 
                 // ----- Character Literal -----
                 .addDefinition("character")
-                .literal("character", self -> token -> {
+                .literal("character", self -> token ->
+                {
                     self.put("value", token.getValue());
                 })
                 .endDefinition(self -> () -> new LispAtom.LispCharacter(
@@ -135,7 +153,8 @@ public class LispASTRules {
 
                 // ----- Symbol -----
                 .addDefinition("symbol")
-                .identifier("symbol", self -> token -> {
+                .identifier("symbol", self -> token ->
+                {
                     self.put("value", token.getValue());
                 })
                 .endDefinition(self -> () -> new LispAtom.LispSymbol(
@@ -144,7 +163,8 @@ public class LispASTRules {
 
                 // ----- Keyword -----
                 .addDefinition("keyword")
-                .identifier("keyword", self -> token -> {
+                .identifier("keyword", self -> token ->
+                {
                     self.put("value", token.getValue());
                 })
                 .endDefinition(self -> () -> new LispAtom.LispKeyword(
@@ -153,9 +173,11 @@ public class LispASTRules {
 
                 // ----- Nil -----
                 .addDefinition("nil")
-                .literal("nil", self -> token -> {
+                .literal("nil", self -> token ->
+                {
                 })
-                .endDefinition(self -> () -> {
+                .endDefinition(self -> () ->
+                {
                     return LispAtom.LispNil.INSTANCE;
                 }, "Expected nil value: nil")
 

@@ -1,10 +1,11 @@
 package org.nest.ast.state;
 
-import org.nest.ast.functional.ASTNodeSupplier;
 import org.nest.ast.StandaloneDefinitionTemplate;
+import org.nest.ast.functional.ASTNodeSupplier;
 
 import java.util.ArrayList;
 import java.util.List;
+
 
 /**
  * Represents a definition in the AST.
@@ -21,11 +22,6 @@ public class Definition
         this.name = name;
     }
 
-    public void addStep(Step step)
-    {
-        steps.add(step);
-    }
-    
     /// Creates a standalone definition template that can be used to build a Definition
     /// outside of the normal rule building pipeline.
     ///
@@ -34,5 +30,10 @@ public class Definition
     public static StandaloneDefinitionTemplate standalone(String name)
     {
         return new StandaloneDefinitionTemplate(name);
+    }
+
+    public void addStep(Step step)
+    {
+        steps.add(step);
     }
 }

@@ -8,51 +8,52 @@ import org.nest.ast.generation.llvm.types.Type;
 import org.nest.ast.generation.llvm.types.TypeFactory;
 
 
-public class Value {
-    private final LLVMValueRef ref;
+public record Value(LLVMValueRef ref)
+{
 
-    public Value(LLVMValueRef ref) {
-        this.ref = ref;
+    public static Value from(LLVMValueRef ref)
+    {
+        return new Value(ref);
     }
 
-    public LLVMValueRef getRef() {
-        return ref;
-    }
-
-    public String getName() {
+    public String getName()
+    {
         return LLVM.LLVMGetValueName(ref).getString();
     }
 
-    public void setName(String name) {
+    public void setName(String name)
+    {
         LLVM.LLVMSetValueName(ref, name);
     }
 
-    public Type getType() {
+    public Type getType()
+    {
         LLVMTypeRef typeRef = LLVM.LLVMTypeOf(ref);
         return TypeFactory.fromLLVM(typeRef);
     }
 
-    public boolean isConstant() {
+    public boolean isConstant()
+    {
         return LLVM.LLVMIsConstant(ref) != 0;
     }
 
-    public boolean isNull() {
+    public boolean isNull()
+    {
         return LLVM.LLVMIsNull(ref) != 0;
     }
 
-    public boolean isUndef() {
+    public boolean isUndef()
+    {
         return LLVM.LLVMIsUndef(ref) != 0;
     }
 
-    public void printToStderr() {
+    public void printToStderr()
+    {
         LLVM.LLVMDumpValue(ref);
     }
 
-    public boolean equals(Value other) {
+    public boolean equals(Value other)
+    {
         return LLVM.LLVMValueAsMetadata(ref).equals(LLVM.LLVMValueAsMetadata(other.ref));
-    }
-
-    public static Value from(LLVMValueRef ref) {
-        return new Value(ref);
     }
 }

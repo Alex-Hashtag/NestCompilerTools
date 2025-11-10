@@ -10,13 +10,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+
 /// Template for defining a choice between alternative steps in an AST rule.
 /// The Choice template allows defining multiple alternative paths, where the first matching path is chosen.
 ///
 /// @param <C> The type parameter for this choice template (self-type)
 /// @param <P> The type of the parent template
 public final class ASTDefinitionTemplateChoice<C extends ASTDefinitionStepTemplate<C>, P extends ASTDefinitionStepTemplate<P>>
-    implements ASTDefinitionStepTemplate<ASTDefinitionTemplateChoice<C, P>>
+        implements ASTDefinitionStepTemplate<ASTDefinitionTemplateChoice<C, P>>
 {
     P parent;
     Set<List<Step>> alternatives;
